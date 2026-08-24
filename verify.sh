@@ -9,17 +9,19 @@ MODE="${1:-build}"
 fail() { echo "HARNESS_VERIFY: FAIL ($1)"; exit 1; }
 
 run_build() {
-  xcodebuild -project "APMKit.xcodeproj" -scheme "APMKit" \
-    -destination "platform=iOS Simulator,name=iPhone 17 Pro" build \
-    | tee /tmp/verify_build.log | tail -20
-  grep -q "BUILD SUCCEEDED" /tmp/verify_build.log || fail "build"
+  set +e
+  swift build 2>&1 | tee /tmp/verify_build.log | tail -40
+  local status="${PIPESTATUS[0]}"
+  set -e
+  [ "$status" -eq 0 ] || fail "build"
 }
 
 run_test() {
-  xcodebuild -project "APMKit.xcodeproj" -scheme "APMKit" \
-    -destination "platform=iOS Simulator,name=iPhone 17 Pro" test \
-    | tee /tmp/verify_test.log | tail -40
-  grep -q "TEST SUCCEEDED" /tmp/verify_test.log || fail "test"
+  set +e
+  swift test 2>&1 | tee /tmp/verify_test.log | tail -60
+  local status="${PIPESTATUS[0]}"
+  set -e
+  [ "$status" -eq 0 ] || fail "test"
 }
 
 run_lint() {
