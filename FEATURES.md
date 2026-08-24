@@ -8,7 +8,7 @@
 
 | Epic | Progress | Active / open |
 |------|:--------:|---------------|
-| APM Kit iOS SDK | 0/10 | feat-001 |
+| APM Kit iOS SDK | 0/10 | feat-001 🟠 (needs review) |
 
 ---
 
@@ -26,7 +26,7 @@ feature per branch/PR; stop for review after each.
 
 | ID | Feature | Status | By | Depends on | Requirements | Evidence |
 |----|---------|:------:|----|------------|--------------|----------|
-| feat-001 | Core & Envelope | 🟡 | — | — | schema §2–5 (01) | — |
+| feat-001 | Core & Envelope | 🟠 | Kevin Hardianto | — | schema §2–5 (01) | 15 tests, `HARNESS_VERIFY: PASS (all)` |
 | feat-002 | Disk Queue | 🟡 | — | feat-001 | MOB-04/05/06 | — |
 | feat-003 | Network Capture | 🟡 | — | feat-001, feat-002 | MOB-01/02/03/10 | — |
 | feat-004 | Scrubbing | 🟡 | — | feat-003 | SEC-01..05b | — |
@@ -42,7 +42,7 @@ feature per branch/PR; stop for review after each.
 
 ### feat-001 · Core & Envelope
 
-- **Status:** 🟡 not started · **Depends on:** —
+- **Status:** 🟠 needs verification (implemented, tests pass, awaiting review) · **Depends on:** —
 - **Requirements:** event model, envelope, device context, session lifecycle (session_id
   resets after >30s background), install_id — schema per `docs/01-Kontrak-Data-API.md` §2–5.
 - **Done when:** constructs + serializes the exact envelope JSON; unit tests assert on JSON
@@ -50,14 +50,26 @@ feature per branch/PR; stop for review after each.
 
 | ✓ | Check | By | Proof |
 |:-:|-------|----|-------|
-| 🟡 | Envelope encodes to the exact shape in `01` §2 | — | Pending |
-| 🟡 | Event encodes to the exact shape in `01` §3 | — | Pending |
-| 🟡 | session_id resets after >30s background | — | Pending |
-| 🟡 | install_id persists across launches | — | Pending |
+| ✅ | Envelope encodes to the exact shape in `01` §2 | Kevin Hardianto | `EnvelopeTests.encodesExactShape`, `nilUserIdRoundTrips`, `roundTrips` |
+| ✅ | Event encodes to the exact shape in `01` §3 | Kevin Hardianto | `EventTests.encodesExactShape`, `ctxOptionalFieldsDecodeAsNil`, `attributeValueRoundTrips` |
+| ✅ | session_id resets after >30s background | Kevin Hardianto | `SessionManagerTests.longBackgroundRotatesSession`, `shortBackgroundKeepsSameSession`, `seqResetsOnRotation` |
+| ✅ | install_id persists across launches (simulated) | Kevin Hardianto | `InstallIdentityTests.persistsAcrossCalls`, `differentStoresGetDifferentIds` |
 
-**Decisions** — none yet.
+15 tests total, `./verify.sh all` → `HARNESS_VERIFY: PASS (all)` (2026-08-24).
+
+**Decisions**
+- `IntegritySnapshot.unset` (all-`false`) is the feat-001 stub; real detection lands in
+  feat-008. Documented in the type's doc comment so it isn't mistaken for a real signal.
+- `DeviceInfo.current()` gates on `#if canImport(UIKit)` so the package still compiles/tests
+  on the host macOS toolchain (`swift test`, no simulator) — see `CONSTITUTION.md` platform
+  invariants. The non-UIKit branch is test-scaffolding only; the SDK always ships on iOS.
 
 **Blockers** — none.
+
+**Files added:** `Sources/APMKit/Core/{AttributeValue,SDKInfo,DeviceInfo,IntegritySnapshot,
+EventContext,ISO8601Formatting,Event,Envelope,InstallIdentity,SessionManager}.swift`,
+`Tests/APMKitTests/Core/{EnvelopeTests,EventTests,SessionManagerTests,InstallIdentityTests}.swift`.
+Removed the placeholder `Tests/APMKitTests/APMKitTests.swift` scaffold test.
 
 ---
 
