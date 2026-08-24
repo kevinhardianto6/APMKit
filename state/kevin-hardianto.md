@@ -8,19 +8,19 @@
 ## Now
 
 - **Objective:** Build the APM Kit iOS SDK (Phase 1 network observability + Phase 2 crash
-  reporting), per docs/00-02. Repo just converted from Xcode framework scaffold to a real SPM
-  package (Package.swift, Sources/APMKit, Tests/APMKitTests).
-- **Active feature:** feat-001 · Core & Envelope
+  reporting), per docs/00-02.
+- **Active feature:** feat-002 · Disk Queue
 - **Status:** 🟠 needs verification — implemented + tested, stopped per build-order rule to
-  wait for review before starting feat-002 (Disk Queue).
-- **Last verify:** `./verify.sh all` → `HARNESS_VERIFY: PASS (all)`, 2026-08-24 (15 tests).
+  wait for review before starting feat-003 (Network Capture).
+- **Last verify:** `./verify.sh all` → `HARNESS_VERIFY: PASS (all)`, 2026-08-24 (23 tests
+  cumulative: 15 feat-001 + 8 feat-002).
 
 ## Next step
 
-Awaiting review of feat-001. On approval: mark ✅ in FEATURES.md, rotate detail to
-`archive/features/feat-001.md`, then start feat-002 (Disk Queue, MOB-04/05/06) — a protocol-
-based local-first store, atomic write, 20MB/5000-event cap with FIFO eviction, survives
-process kill / force-quit / restart.
+Awaiting review of feat-002. On approval: mark ✅, rotate to `archive/features/feat-002.md`,
+then start feat-003 (Network Capture, MOB-01/02/03/10) — `URLSessionTaskDelegate` +
+`URLSessionTaskMetrics` capture, failure_category mapping, the SSL-pinning-vs-cancel
+distinction called out in docs/01 §5.
 
 ## Parked
 
@@ -38,14 +38,10 @@ process kill / force-quit / restart.
 
 | File | Change | Why |
 |------|--------|-----|
-| `docs/*.md` | Added (copied from spec source) | Versioned source of truth for MOB-/SEC- reqs |
-| `Package.swift`, `Sources/`, `Tests/` | Added; removed `APMKit.xcodeproj`/`APMKitTests` | Spec deliverable is SPM, not an Xcode framework project |
-| `verify.sh` | Rewritten for `swift build`/`swift test` | Matches new SPM structure |
-| `AGENTS.md`, `CONSTITUTION.md`, `FEATURES.md` | Updated | Reflect SPM/iOS15, pipeline invariants, F1-F10 backlog |
-| `.gitignore` | Added | `.build/`, `.swiftpm/` were showing as untracked noise |
-| `Sources/APMKit/Core/*.swift` (10 files) | Added | feat-001: Envelope, Event, DeviceInfo, SDKInfo/AppInfo, IntegritySnapshot (stub), EventContext, AttributeValue, ISO8601Formatting, InstallIdentity, SessionManager |
-| `Tests/APMKitTests/Core/*.swift` (4 files) | Added | feat-001 unit tests — 15 tests, all passing |
-| `Tests/APMKitTests/APMKitTests.swift` | Removed | Placeholder scaffold test superseded by real feat-001 tests |
-| `FEATURES.md` | feat-001 → 🟠 needs verification | Done-when criteria met, evidence recorded |
+| `Sources/APMKit/Storage/{DiskQueue,FileDiskQueue}.swift` | Added | feat-002: protocol + file-per-event atomic-write implementation |
+| `Tests/APMKitTests/Storage/FileDiskQueueTests.swift` | Added | feat-002: 8 tests — FIFO order, restart durability, count/byte eviction, torn-write safety, SEC-07 |
+| `archive/features/feat-001.md` | Added | Rotated feat-001 detail on closing it |
+| `archive/sessions/2026-08-24-feat-001.md` | Added | Rotated prior session's Changes table |
+| `FEATURES.md` | feat-001 → ✅ (archived); feat-002 → 🟠 needs verification | Evidence recorded, done-when met |
 
 _Ground truth: run `git diff --stat` to confirm this table matches reality._

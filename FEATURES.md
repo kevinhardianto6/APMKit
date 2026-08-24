@@ -8,7 +8,7 @@
 
 | Epic | Progress | Active / open |
 |------|:--------:|---------------|
-| APM Kit iOS SDK | 0/10 | feat-001 🟠 (needs review) |
+| APM Kit iOS SDK | 1/10 | feat-002 🟠 (needs review) |
 
 ---
 
@@ -26,8 +26,8 @@ feature per branch/PR; stop for review after each.
 
 | ID | Feature | Status | By | Depends on | Requirements | Evidence |
 |----|---------|:------:|----|------------|--------------|----------|
-| feat-001 | Core & Envelope | 🟠 | Kevin Hardianto | — | schema §2–5 (01) | 15 tests, `HARNESS_VERIFY: PASS (all)` |
-| feat-002 | Disk Queue | 🟡 | — | feat-001 | MOB-04/05/06 | — |
+| feat-001 | Core & Envelope | ✅ | Kevin Hardianto | — | schema §2–5 (01) | [archive](archive/features/feat-001.md) |
+| feat-002 | Disk Queue | 🟠 | Kevin Hardianto | feat-001 | MOB-04/05/06, SEC-07 | 8 tests, `HARNESS_VERIFY: PASS (all)` |
 | feat-003 | Network Capture | 🟡 | — | feat-001, feat-002 | MOB-01/02/03/10 | — |
 | feat-004 | Scrubbing | 🟡 | — | feat-003 | SEC-01..05b | — |
 | feat-005 | Sync Engine | 🟡 | — | feat-002, feat-004 | MOB-07/08/09 | — |
@@ -40,47 +40,48 @@ feature per branch/PR; stop for review after each.
 > feat-001..008 = end of Phase 1 (SDK shippable for network observability). feat-009/010 =
 > Phase 2. feat-009 may span several PRs (sub-split as needed) — do not rush the crash handler.
 
-### feat-001 · Core & Envelope
+### feat-002 · Disk Queue
 
-- **Status:** 🟠 needs verification (implemented, tests pass, awaiting review) · **Depends on:** —
-- **Requirements:** event model, envelope, device context, session lifecycle (session_id
-  resets after >30s background), install_id — schema per `docs/01-Kontrak-Data-API.md` §2–5.
-- **Done when:** constructs + serializes the exact envelope JSON; unit tests assert on JSON
-  shape (field names, types, required vs optional).
+- **Status:** 🟠 needs verification (implemented, tests pass, awaiting review) · **Depends on:** feat-001 ✅
+- **Requirements:** local-first persistence behind a protocol; atomic write; survives process
+  kill/force-quit/restart; cap ~20MB or ~5000 events, FIFO eviction. MOB-04/05/06. Also folds
+  in SEC-07 (data-at-rest file protection + backup exclusion on the queue directory) — see
+  Decisions below for why that wasn't in the original F-mapping.
+- **Done when:** survives a simulated restart; FIFO-evicts when full (tests).
 
 | ✓ | Check | By | Proof |
 |:-:|-------|----|-------|
-| ✅ | Envelope encodes to the exact shape in `01` §2 | Kevin Hardianto | `EnvelopeTests.encodesExactShape`, `nilUserIdRoundTrips`, `roundTrips` |
-| ✅ | Event encodes to the exact shape in `01` §3 | Kevin Hardianto | `EventTests.encodesExactShape`, `ctxOptionalFieldsDecodeAsNil`, `attributeValueRoundTrips` |
-| ✅ | session_id resets after >30s background | Kevin Hardianto | `SessionManagerTests.longBackgroundRotatesSession`, `shortBackgroundKeepsSameSession`, `seqResetsOnRotation` |
-| ✅ | install_id persists across launches (simulated) | Kevin Hardianto | `InstallIdentityTests.persistsAcrossCalls`, `differentStoresGetDifferentIds` |
+| ✅ | Atomic write (`Data.write(options: .atomic)`, temp+rename) | Kevin Hardianto | `strayArtifactIsIgnored` — a torn write's temp artifact never surfaces |
+| ✅ | Survives simulated process kill / restart | Kevin Hardianto | `survivesSimulatedRestart`, `sequenceRecoveryAvoidsCollisionAfterRestart` |
+| ✅ | FIFO order preserved | Kevin Hardianto | `enqueueThenPeekIsFIFO`, `removeDeletesOnlyGivenIds` |
+| ✅ | FIFO eviction at event-count cap (~5000 default) | Kevin Hardianto | `evictsOldestWhenCountCapExceeded` |
+| ✅ | FIFO eviction at byte-size cap (~20MB default) | Kevin Hardianto | `evictsOldestWhenByteCapExceeded` |
+| ✅ | SEC-07: file protection + backup exclusion on queue dir | Kevin Hardianto | `FileDiskQueue.applyDataProtection` (not independently unit-tested — `FileProtectionType` has no observable effect on macOS host; needs a real-device/simulator check later) |
 
-15 tests total, `./verify.sh all` → `HARNESS_VERIFY: PASS (all)` (2026-08-24).
+8 tests total (23 cumulative with feat-001), `./verify.sh all` → `HARNESS_VERIFY: PASS (all)` (2026-08-24).
 
 **Decisions**
-- `IntegritySnapshot.unset` (all-`false`) is the feat-001 stub; real detection lands in
-  feat-008. Documented in the type's doc comment so it isn't mistaken for a real signal.
-- `DeviceInfo.current()` gates on `#if canImport(UIKit)` so the package still compiles/tests
-  on the host macOS toolchain (`swift test`, no simulator) — see `CONSTITUTION.md` platform
-  invariants. The non-UIKit branch is test-scaffolding only; the SDK always ships on iOS.
+- SEC-07 wasn't mapped to any F-number in the original build order despite governing this
+  exact file. Per user direction, folded into feat-002 rather than tracked as a separate
+  future row — see `CONSTITUTION.md`-adjacent reasoning inline in `FileDiskQueue.swift`.
+- One-file-per-event on disk (not one append-only log file). Chosen over a log file because
+  it makes FIFO eviction, partial-write safety, and selective removal-by-id all fall out of
+  filesystem operations (`removeItem`, directory listing + sort) instead of needing a custom
+  log format with compaction. Filename encodes a zero-padded monotonic sequence + event_id,
+  so directory listing sorted by name *is* FIFO order.
+- `enqueue`/`peek`/`remove`/`count`/`sizeInBytes` are synchronous and serialized on a private
+  `DispatchQueue` — `enqueue` blocks the calling thread until the event is durably on disk.
+  This is intentional: the "write local first" principle requires the write to have
+  *completed* before any subsequent network call, so callers (feat-003 onward) must invoke
+  this off the main thread, not treat it as fire-and-forget.
+- SEC-07's `FileProtectionType` API is iOS-only (`#if os(iOS)`), following the same
+  host-toolchain-compilation pattern as feat-001's `DeviceInfo`. Backup exclusion
+  (`isExcludedFromBackup`) is cross-platform and applied unconditionally.
 
 **Blockers** — none.
 
-**Files added:** `Sources/APMKit/Core/{AttributeValue,SDKInfo,DeviceInfo,IntegritySnapshot,
-EventContext,ISO8601Formatting,Event,Envelope,InstallIdentity,SessionManager}.swift`,
-`Tests/APMKitTests/Core/{EnvelopeTests,EventTests,SessionManagerTests,InstallIdentityTests}.swift`.
-Removed the placeholder `Tests/APMKitTests/APMKitTests.swift` scaffold test.
-
----
-
-### feat-002 · Disk Queue
-
-- **Status:** 🟡 not started · **Depends on:** feat-001
-- **Requirements:** local-first persistence behind a protocol; atomic write; survives process
-  kill/force-quit/restart; cap ~20MB or ~5000 events, FIFO eviction. MOB-04/05/06.
-- **Done when:** survives a simulated restart; FIFO-evicts when full (tests).
-
-**Decisions** — none yet. **Blockers** — none.
+**Files added:** `Sources/APMKit/Storage/{DiskQueue,FileDiskQueue}.swift`,
+`Tests/APMKitTests/Storage/FileDiskQueueTests.swift`.
 
 ---
 
