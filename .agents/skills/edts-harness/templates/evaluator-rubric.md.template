@@ -1,0 +1,26 @@
+# Evaluator rubric
+
+> The maker-checker yardstick. A **checker** pass (or subagent) grades finished feature work
+> against this — separate from the harness audit, which only checks *structure*.
+> A feature can't go ✅ in `FEATURES.md` until every `must` row passes.
+> Every criterion must be mechanically confirmable. If a checker can't verify it, reword it.
+
+## Grade each feature
+
+| # | Criterion | Level | How the checker confirms it |
+|---|-----------|:-----:|-----------------------------|
+| 1 | `Done when` criteria all met | must | Re-read the feature's criteria; each maps to a proof |
+| 2 | Build passes | must | `{{VERIFY_BUILD}}` → `HARNESS_VERIFY: PASS` |
+| 3 | Tests pass (where applicable) | must | `{{VERIFY_TEST}}` → PASS, count didn't silently drop |
+| 4 | Evidence recorded | must | Feature's evidence sub-table is filled, not `Pending` |
+| 5 | In scope | must | `git diff` touches only files this feature should — no drive-by edits |
+| 6 | Constitution honored | must | No rule in `CONSTITUTION.md` violated |
+| 7 | No new dead code | should | Deletions traced; no orphaned symbols left (repo-wide grep) |
+| 8 | Verified in the real runtime | should | Exercised where the change is user-visible |
+
+## Verdict
+
+- **PASS** — every `must` holds → feature may be marked ✅.
+- **REWORK** — any `must` fails → back to the maker with the failing rows named.
+- **CONDITIONAL** — all `must` pass but a `should` is deferred → mark 🟠 and name what's
+  pending. Never silently skip it.

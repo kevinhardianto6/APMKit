@@ -1,0 +1,43 @@
+# Features
+
+> Scope backbone, grouped by epic (one epic = one PRD = one ID prefix).
+> Status: 🟡 not started · 🔵 in progress · ✅ done · 🔴 blocked · 🟠 needs verification
+> **One feature is active at a time per person** (see `state/<name>.md`) — the backlog may span epics.
+> `By` = who actually did the work, from `git config user.name` on the machine that ran it.
+> Completed feature detail → `archive/features/`. Completed *epics* → `archive/epics/`, listed under Shipped.
+
+| Epic | Progress | Active / open |
+|------|:--------:|---------------|
+| {{EPIC_NAME}} | 0/{{FEATURE_COUNT}} | — |
+
+---
+
+## Epic · {{EPIC_NAME}}
+
+**PRD:** {{PRD_PATH}} · **Prefix:** `{{ID_PREFIX}}`
+**Started:** {{TODAY}} · **Started by:** {{GIT_USER}}
+
+| ID | Feature | Status | By | Depends on | Evidence |
+|----|---------|:------:|----|------------|----------|
+| {{ID_PREFIX}}001 | {{FEATURE_NAME}} | 🟡 | — | — | — |
+
+### {{ID_PREFIX}}001 · {{FEATURE_NAME}}
+
+- **Status:** 🟡 not started · **Depends on:** —
+- **Done when:** {{DONE_CRITERIA}}
+
+| ✓ | Check | By | Proof |
+|:-:|-------|----|-------|
+| 🟡 | {{FIRST_CHECK}} | — | Pending |
+
+**Decisions** — none yet.
+
+**Blockers** — none.
+
+---
+
+## Shipped
+
+Completed epics, rotated to `archive/epics/`. One line each.
+
+_None yet._

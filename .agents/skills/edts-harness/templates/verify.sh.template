@@ -1,0 +1,31 @@
+#!/bin/bash
+# Harness verification for {{PROJECT_NAME}}. Run from repo root.
+# Usage: ./verify.sh [build|test|lint|all]   (default: build)
+# Always ends with a machine-parseable line: HARNESS_VERIFY: PASS|FAIL
+set -eo pipefail
+
+MODE="${1:-build}"
+
+fail() { echo "HARNESS_VERIFY: FAIL ($1)"; exit 1; }
+
+run_build() {
+{{BUILD_BLOCK}}
+}
+
+run_test() {
+{{TEST_BLOCK}}
+}
+
+run_lint() {
+{{LINT_BLOCK}}
+}
+
+case "$MODE" in
+  build) run_build ;;
+  test)  run_test ;;
+  lint)  run_lint ;;
+  all)   run_build && run_test && run_lint ;;
+  *)     echo "Unknown mode: $MODE (use build|test|lint|all)"; exit 2 ;;
+esac
+
+echo "HARNESS_VERIFY: PASS ($MODE)"

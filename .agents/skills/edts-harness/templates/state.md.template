@@ -1,0 +1,37 @@
+# State — {{GIT_USER}}
+
+> Your personal working state. One file per person (`state/<git config user.name>.md`),
+> so merge / rebase / cherry-pick never conflict — nobody else ever writes here.
+> Keep it small — cap ~100 lines. Finished work rotates to `archive/`.
+> Team-wide view of who's doing what lives in `FEATURES.md`, not here.
+
+## Now
+
+- **Objective:** {{OBJECTIVE}}
+- **Active feature:** —
+- **Status:** —
+- **Last verify:** not run yet.
+
+## Next step
+
+{{NEXT_STEP}}
+
+## Parked
+
+- None.
+
+## In flight elsewhere
+
+- None.
+
+## Blockers
+
+- None.
+
+## Changes (this session)
+
+| File | Change | Why |
+|------|--------|-----|
+| _(none yet)_ | — | — |
+
+_Ground truth: run `git diff --stat` to confirm this table matches reality._
