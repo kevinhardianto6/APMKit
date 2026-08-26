@@ -112,10 +112,17 @@ Konsekuensinya: input mentah yang sama (mis. nomor telepon yang sama) selalu men
 |---|---|---|
 | `host`, `path`, `method` | string | ✓ |
 | `failure_category` | enum (§5) | ✓ |
-| `error_domain`, `error_code` | string, int | ✓ |
+| `status_code` | int | ✓ jika `failure_category = http_error`, selain itu — |
+| `error_domain`, `error_code` | string, int | ✓ untuk kegagalan transport, — untuk `http_error` |
 | `underlying_domain`, `underlying_code` | string, int | — |
 | `tls_phase_reached` | enum: `none` \| `started` \| `completed` | — |
 | `duration_ms` | int | ✓ |
+
+> **Perilaku untuk respons 4xx/5xx (`http_error`).** Respons dengan status ≥ 400 di level client bukan error transport — di iOS muncul sebagai `didCompleteWithError: nil` yang biasa (tak bisa dibedakan dari sukses tanpa SDK memeriksa status), di Android sebagai response biasa. SDK **memeriksa `status_code` di setiap request yang selesai**, lalu:
+> 1. Selalu emit event **`network`** dengan `status_code` asli (§4.1) — request-nya memang selesai.
+> 2. Jika `status_code ≥ 400`, **tambahan** emit event **`network_failure`** dengan `failure_category = http_error` dan `status_code` terisi (untuk fingerprinting §6).
+>
+> `http_error` adalah kategori tersendiri, **terpisah** dari kegagalan transport (`ssl_*`, `timeout`, `dns`, `connectivity`). Satu respons 500 = satu `network` + satu `network_failure(http_error)`; **jangan** juga dihitung sebagai kegagalan transport, supaya "network failure rate" per kategori di dashboard tidak tercampur.
 
 ### 4.3 `crash`
 
@@ -168,7 +175,7 @@ Nilai **identik di iOS & Android**. Dipakai untuk grouping dan filter di dashboa
 | `dns` | Resolusi nama gagal |
 | `connectivity` | Tidak ada koneksi atau koneksi terputus di tengah |
 | `cancelled` | Dibatalkan aplikasi secara sengaja |
-| `http_error` | Response diterima dengan status 4xx/5xx |
+| `http_error` | Response diterima dengan status 4xx/5xx (aturan emit di §4.2) |
 | `unknown` | Tidak terpetakan |
 
 > **Catatan implementasi iOS:** validasi pinning kustom yang menolak koneksi umumnya muncul sebagai `NSURLErrorCancelled`, bukan sebagai error SSL. SDK harus membedakannya dari pembatalan biasa dengan menandai request yang gagal di tahap trust evaluation, lalu memetakannya ke `ssl_pinning_rejected`. Tanpa ini, kegagalan pinning tidak akan terlihat sebagai masalah keamanan di dashboard.

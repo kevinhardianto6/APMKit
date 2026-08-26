@@ -58,6 +58,7 @@ SDK yang di-embed ke aplikasi iOS & Android, bertugas menangkap event, menyimpan
 |---|---|---|
 | MOB-01 | Menangkap metrik seluruh HTTP request: URL, method, status, durasi, breakdown per fase (DNS/TCP/TLS/TTFB) | P0 |
 | MOB-02 | Menangkap kegagalan network dan memetakannya ke `failure_category` (`01` §5) | P0 |
+| MOB-02b | Periksa `status_code` tiap request yang selesai: selalu emit event `network`; jika status ≥ 400, tambahan emit `network_failure` dengan `failure_category = http_error` + `status_code` (aturan lengkap `01` §4.2). `http_error` tidak dihitung sebagai kegagalan transport. | P0 |
 | MOB-03 | Membedakan penolakan pinning kustom dari pembatalan request biasa | P0 |
 | MOB-10 | Traffic SDK sendiri dikecualikan dari instrumentasi (mencegah loop tak berujung) | P0 |
 
