@@ -61,4 +61,34 @@ struct ManualReporterTests {
             #expect(longValue.count <= 256)
         }
     }
+
+    // MARK: - Breadcrumb attachment (MOB-13)
+
+    @Test("logError attaches a JSON snapshot of the breadcrumb ring buffer")
+    func logErrorAttachesBreadcrumbSnapshot() throws {
+        let sink = CollectingEventSink()
+        let buffer = BreadcrumbRingBuffer(capacity: 100)
+        buffer.add(Breadcrumb(category: .navigation, message: "OrderScreen"))
+        buffer.add(Breadcrumb(category: .userAction, message: "tapped checkout"))
+        let reporter = ManualReporter(sink: sink, sessionManager: SessionManager(), breadcrumbs: buffer)
+
+        reporter.logError(SampleError())
+
+        let json = try #require(string(sink.events[0], "breadcrumbs"))
+        let decoded = try JSONDecoder().decode([Breadcrumb].self, from: Data(json.utf8))
+        #expect(decoded.map(\.message) == ["OrderScreen", "tapped checkout"])
+        #expect(decoded.map(\.category) == [.navigation, .userAction])
+    }
+
+    @Test("with no breadcrumbs recorded, the snapshot is an empty JSON array, not an error")
+    func logErrorWithNoBreadcrumbsAttachesEmptyArray() throws {
+        let sink = CollectingEventSink()
+        let reporter = ManualReporter(sink: sink, sessionManager: SessionManager(), breadcrumbs: BreadcrumbRingBuffer(capacity: 100))
+
+        reporter.logError(SampleError())
+
+        let json = try #require(string(sink.events[0], "breadcrumbs"))
+        let decoded = try JSONDecoder().decode([Breadcrumb].self, from: Data(json.utf8))
+        #expect(decoded.isEmpty)
+    }
 }

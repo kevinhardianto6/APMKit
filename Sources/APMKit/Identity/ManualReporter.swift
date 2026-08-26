@@ -13,14 +13,16 @@ import Foundation
 public final class ManualReporter {
     private let sink: EventSink
     private let sessionManager: SessionManager
+    private let breadcrumbs: BreadcrumbRingBuffer
 
     /// docs/01 §4.4: "Maks 20 key, masing-masing ≤ 256 karakter."
     private static let maxCustomKeys = 20
     private static let maxCustomValueLength = 256
 
-    public init(sink: EventSink, sessionManager: SessionManager) {
+    public init(sink: EventSink, sessionManager: SessionManager, breadcrumbs: BreadcrumbRingBuffer = .shared) {
         self.sink = sink
         self.sessionManager = sessionManager
+        self.breadcrumbs = breadcrumbs
     }
 
     /// Reports a handled error (docs/01 §4.4: `handled` is always `true` for this path —
@@ -33,7 +35,8 @@ public final class ManualReporter {
             "message": .string(nsError.localizedDescription),
             "domain": .string(nsError.domain),
             "code": .int(nsError.code),
-            "handled": .bool(true)
+            "handled": .bool(true),
+            "breadcrumbs": .string(breadcrumbsJSON())
         ]
 
         for (key, value) in context.prefix(Self.maxCustomKeys) {
@@ -41,5 +44,17 @@ public final class ManualReporter {
         }
 
         sink.receive(Event(type: "error", seq: sessionManager.nextSequenceNumber(), attrs: attrs))
+    }
+
+    /// MOB-13: the last 100 breadcrumbs, attached as a snapshot. JSON-encoded since
+    /// `AttributeValue` only carries scalars — same pattern as feat-004's `req_headers`.
+    /// No redaction happens here: this string flows into `attrs` above like everything else
+    /// and gets caught by `Scrubber`'s blanket pass, the same as any other event attribute.
+    private func breadcrumbsJSON() -> String {
+        guard let data = try? JSONEncoder().encode(breadcrumbs.snapshot()),
+              let json = String(data: data, encoding: .utf8) else {
+            return "[]"
+        }
+        return json
     }
 }

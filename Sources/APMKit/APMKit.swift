@@ -64,4 +64,13 @@ public enum APM {
     ) {
         ManualReporter(sink: sink, sessionManager: sessionManager).logError(error, context: context)
     }
+
+    /// Records a breadcrumb (docs/01 §4.5, docs/02 §3.4 MOB-11/12/13) — a small chronological
+    /// trail of what happened before an error, not an event of its own. Appends to the
+    /// shared ring buffer (last 100); `ManualReporter.logError` attaches a snapshot to the
+    /// resulting `error` event. `message` is developer-supplied free text and gets scrubbed
+    /// there, along with everything else — this call itself does no PII handling.
+    public static func breadcrumb(_ message: String, category: BreadcrumbCategory, level: BreadcrumbLevel = .info) {
+        BreadcrumbRingBuffer.shared.add(Breadcrumb(category: category, message: message, level: level))
+    }
 }
