@@ -42,4 +42,26 @@ public enum APM {
         let session = URLSession(configuration: configuration, delegate: captureDelegate, delegateQueue: nil)
         return (session, captureDelegate)
     }
+
+    /// Sets `envelope.user_id` (docs/01 §2.1, MOB-28, SEC-06). Accepts **any** free-form
+    /// string — a phone number, email, internal id, anything. The SDK sends it **raw**, never
+    /// hashes or validates it; hashing to the opaque `user_ref` is the backend's job at
+    /// ingestion. If never called, the SDK falls back to a stable random id persisted per
+    /// install (`UserIdentity.currentUserId()`, read by `EnvelopeFactory`).
+    public static func setUser(id: String) {
+        UserIdentity.setUser(id: id)
+    }
+
+    /// Reports a handled error (docs/01 §4.4, docs/02 §3.4 MOB-11). See `ManualReporter` —
+    /// takes an explicit `sink`/`sessionManager` for now, matching `instrumentedSession()`'s
+    /// dependency style; there is no composition root yet to hold that state for a
+    /// zero-argument call (feat-006/010 territory once one exists).
+    public static func logError(
+        _ error: Error,
+        context: [String: String] = [:],
+        sink: EventSink,
+        sessionManager: SessionManager
+    ) {
+        ManualReporter(sink: sink, sessionManager: sessionManager).logError(error, context: context)
+    }
 }

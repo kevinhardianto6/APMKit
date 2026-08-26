@@ -2,8 +2,9 @@ import Foundation
 
 /// Wraps a batch of events with the static envelope context (docs/01 §2) at upload time.
 /// Every field is injectable so `SyncEngine` doesn't need to know how any of them are
-/// produced — `user_id` defaults to `nil` since `APM.setUser`/install-id fallback lands in
-/// feat-006; `integrity` defaults to `.unset` since real detection lands in feat-008.
+/// produced — `user_id` defaults to `UserIdentity.currentUserId()` (feat-006: the explicit
+/// value from `APM.setUser`, or a stable per-install fallback); `integrity` defaults to
+/// `.unset` since real detection lands in feat-008.
 public struct EnvelopeFactory {
     private let sessionManager: SessionManager
     private let appInfo: () -> AppInfo
@@ -18,7 +19,7 @@ public struct EnvelopeFactory {
         deviceInfo: @escaping () -> DeviceInfo = { DeviceInfo.current() },
         integrity: @escaping () -> IntegritySnapshot = { .unset },
         installId: @escaping () -> String = { InstallIdentity.current() },
-        userId: @escaping () -> String? = { nil }
+        userId: @escaping () -> String? = { UserIdentity.currentUserId() }
     ) {
         self.sessionManager = sessionManager
         self.appInfo = appInfo

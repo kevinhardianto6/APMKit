@@ -25,10 +25,18 @@ struct EnvelopeFactoryTests {
         #expect(envelope.events.map(\.eventId) == events.map(\.eventId))
     }
 
-    @Test("defaults userId to nil (feat-006 not landed yet)")
-    func defaultsUserIdToNil() {
-        let factory = EnvelopeFactory(sessionManager: SessionManager())
+    @Test("threads an isolated UserIdentity-backed userId closure through unchanged")
+    func threadsUserIdentityUserIdThrough() throws {
+        let suiteName = "EnvelopeFactoryTests.\(UUID())"
+        let defaults = try #require(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        UserIdentity.setUser(id: "raw-user-id-value", userDefaults: defaults)
+
+        let factory = EnvelopeFactory(
+            sessionManager: SessionManager(),
+            userId: { UserIdentity.currentUserId(userDefaults: defaults) }
+        )
         let envelope = factory.makeEnvelope(events: [])
-        #expect(envelope.userId == nil)
+        #expect(envelope.userId == "raw-user-id-value")
     }
 }

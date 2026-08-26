@@ -8,7 +8,7 @@
 
 | Epic | Progress | Active / open |
 |------|:--------:|---------------|
-| APM Kit iOS SDK | 5/10 | feat-006 🔵 |
+| APM Kit iOS SDK | 6/10 | feat-007 🔵 |
 
 ---
 
@@ -31,8 +31,8 @@ feature per branch/PR; stop for review after each.
 | feat-003 | Network Capture | ✅ | Kevin Hardianto | feat-001, feat-002 | MOB-01/02/03/10, MOB-02b | [archive](archive/features/feat-003.md) |
 | feat-004 | Scrubbing | ✅ | Kevin Hardianto | feat-003 | SEC-01..05b | [archive](archive/features/feat-004.md) |
 | feat-005 | Sync Engine | ✅ | Kevin Hardianto | feat-002, feat-004 | MOB-07/08/09 | [archive](archive/features/feat-005.md) |
-| feat-006 | Identifier & Manual API | 🔵 | Kevin Hardianto | feat-001, feat-004 | MOB-28, SEC-06 | — |
-| feat-007 | Breadcrumbs | 🟡 | — | feat-004, feat-006 | MOB-11/12/13 | — |
+| feat-006 | Identifier & Manual API | ✅ | Kevin Hardianto | feat-001, feat-004 | MOB-28, SEC-06 | [archive](archive/features/feat-006.md) |
+| feat-007 | Breadcrumbs | 🔵 | Kevin Hardianto | feat-004, feat-006 | MOB-11/12/13 | — |
 | feat-008 | Device Integrity | 🟡 | — | feat-001 | MOB-29/30/31 | — |
 | feat-009 | Crash Reporting (KSCrash) | 🟡 | — | feat-001..008 | MOB-15/16/17 | — |
 | feat-010 | Stability + Remote Control | 🟡 | — | feat-005, feat-009 | MOB-18/19/20/21/27 | — |
@@ -40,23 +40,9 @@ feature per branch/PR; stop for review after each.
 > feat-001..008 = end of Phase 1 (SDK shippable for network observability). feat-009/010 =
 > Phase 2. feat-009 may span several PRs (sub-split as needed) — do not rush the crash handler.
 
-### feat-006 · Identifier & Manual API
-
-- **Status:** 🔵 in progress · **Depends on:** feat-001 ✅, feat-004 ✅
-- **Requirements:** `APM.setUser(id:)` takes any free-form string, sent **raw** in
-  `envelope.user_id` over TLS, never hashed client-side (hashing to `user_ref` is backend's
-  job). Fallback: stable random id persisted per install if never set. Raw `user_id` must
-  never leak into breadcrumbs/logs/other fields. Also `APM.logError`. MOB-28, SEC-06.
-- **Done when:** raw `user_id` present in envelope, never leaks elsewhere; fallback stable
-  per install (tests).
-
-**Decisions** — none yet. **Blockers** — none.
-
----
-
 ### feat-007 · Breadcrumbs
 
-- **Status:** 🟡 not started · **Depends on:** feat-004, feat-006
+- **Status:** 🔵 in progress · **Depends on:** feat-004 ✅, feat-006 ✅
 - **Requirements:** `APM.breadcrumb(_:category:)` + automatic (screen/lifecycle/connectivity);
   ring buffer of last 100 attached to each error event. MOB-11/12/13.
 - **Done when:** ring buffer attaches to errors; auto-crumbs fire (tests).
