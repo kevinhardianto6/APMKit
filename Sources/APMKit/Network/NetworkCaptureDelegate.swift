@@ -4,6 +4,11 @@ import Network
 /// `URLSessionTaskDelegate` that captures every request on an instrumented session as a
 /// `network` or `network_failure` event (docs/01 §4.1/§4.2, docs/02 §3.1 MOB-01/02/03/10).
 ///
+/// Captures query strings and headers RAW/unfiltered — SEC-02 (header allowlist) and SEC-03
+/// (query-value redaction) are enforced downstream by `Scrubber`, not here. This keeps the
+/// scrubber the single unbypassable enforcement point (feat-003/feat-004 amendment,
+/// 2026-08-24) instead of splitting the guarantee across two places.
+///
 /// All internal state access is defensive per `CONSTITUTION.md` rule #1 (SDK must never
 /// crash or throw into the host app) — a malformed task/response never propagates, it's
 /// simply not captured.
@@ -65,13 +70,23 @@ public final class NetworkCaptureDelegate: NSObject, URLSessionTaskDelegate {
         guard !excludedHosts.contains(host) else { return }
 
         let method = request.httpMethod ?? "GET"
-        let path = url.path.isEmpty ? "/" : url.path
+        // SEC-03: query string is captured RAW here (values un-redacted, param names and
+        // values both intact) — the Scrubber is the single unbypassable point where query
+        // values get redacted before disk. Never redact/filter here; that would let a caller
+        // who skips the Scrubber (there shouldn't be one, but the layering should not depend
+        // on that) see clean data by accident.
+        let rawPath = url.path.isEmpty ? "/" : url.path
+        let path = url.query.map { "\(rawPath)?\($0)" } ?? rawPath
+        // SEC-02: same layering — ALL request headers are captured raw, including
+        // Authorization/Cookie. The Scrubber's HeaderAllowlist is what actually enforces the
+        // allowlist before anything reaches disk.
+        let requestHeadersJSON = headersJSON(request.allHTTPHeaderFields ?? [:])
         let transaction = metrics?.transactionMetrics.last
         let durationMs = metrics.map { Int($0.taskInterval.duration * 1000) } ?? 0
 
         if let nsError = error as NSError? {
             emitFailureEvent(
-                host: host, path: path, method: method,
+                host: host, path: path, method: method, requestHeadersJSON: requestHeadersJSON,
                 error: nsError, pinningRejected: pinningRejected,
                 transaction: transaction, durationMs: durationMs
             )
@@ -79,7 +94,10 @@ public final class NetworkCaptureDelegate: NSObject, URLSessionTaskDelegate {
         }
 
         guard let httpResponse = task.response as? HTTPURLResponse else { return }
-        emitSuccessEvent(host: host, path: path, method: method, response: httpResponse, transaction: transaction, durationMs: durationMs)
+        emitSuccessEvent(
+            host: host, path: path, method: method, requestHeadersJSON: requestHeadersJSON,
+            response: httpResponse, transaction: transaction, durationMs: durationMs
+        )
 
         if httpResponse.statusCode >= 400 {
             emitHTTPErrorEvent(host: host, path: path, method: method, statusCode: httpResponse.statusCode, durationMs: durationMs)
@@ -89,7 +107,7 @@ public final class NetworkCaptureDelegate: NSObject, URLSessionTaskDelegate {
     // MARK: - Event construction
 
     private func emitSuccessEvent(
-        host: String, path: String, method: String,
+        host: String, path: String, method: String, requestHeadersJSON: String,
         response: HTTPURLResponse, transaction: URLSessionTaskTransactionMetrics?, durationMs: Int
     ) {
         var attrs: [String: AttributeValue] = [
@@ -97,7 +115,9 @@ public final class NetworkCaptureDelegate: NSObject, URLSessionTaskDelegate {
             "path": .string(path),
             "method": .string(method),
             "status_code": .int(response.statusCode),
-            "duration_ms": .int(durationMs)
+            "duration_ms": .int(durationMs),
+            "req_headers": .string(requestHeadersJSON),
+            "res_headers": .string(headersJSON(stringKeyedHeaders(response.allHeaderFields)))
         ]
 
         if let transaction {
@@ -128,7 +148,7 @@ public final class NetworkCaptureDelegate: NSObject, URLSessionTaskDelegate {
     }
 
     private func emitFailureEvent(
-        host: String, path: String, method: String,
+        host: String, path: String, method: String, requestHeadersJSON: String,
         error: NSError, pinningRejected: Bool,
         transaction: URLSessionTaskTransactionMetrics?, durationMs: Int
     ) {
@@ -146,7 +166,8 @@ public final class NetworkCaptureDelegate: NSObject, URLSessionTaskDelegate {
             "error_domain": .string(error.domain),
             "error_code": .int(error.code),
             "duration_ms": .int(durationMs),
-            "tls_phase_reached": .string(phase.rawValue)
+            "tls_phase_reached": .string(phase.rawValue),
+            "req_headers": .string(requestHeadersJSON)
         ]
         if let underlying = error.userInfo[NSUnderlyingErrorKey] as? NSError {
             attrs["underlying_domain"] = .string(underlying.domain)
@@ -177,6 +198,25 @@ public final class NetworkCaptureDelegate: NSObject, URLSessionTaskDelegate {
 
     private func markPinningRejected(taskIdentifier: Int) {
         stateQueue.sync { _ = pinningRejectedTaskIdentifiers.insert(taskIdentifier) }
+    }
+
+    /// docs/01 §4.1/§4.2 has no dedicated headers field — this is an additive attribute
+    /// (docs/01 §11: new optional attrs don't require a schema_version bump). JSON-encoded
+    /// since `AttributeValue` only carries scalars, not nested structures.
+    private func headersJSON(_ headers: [String: String]) -> String {
+        guard !headers.isEmpty,
+              let data = try? JSONEncoder().encode(headers),
+              let json = String(data: data, encoding: .utf8) else {
+            return "{}"
+        }
+        return json
+    }
+
+    private func stringKeyedHeaders(_ headerFields: [AnyHashable: Any]) -> [String: String] {
+        Dictionary(uniqueKeysWithValues: headerFields.compactMap { key, value -> (String, String)? in
+            guard let key = key as? String else { return nil }
+            return (key, "\(value)")
+        })
     }
 
     private func msBetween(_ start: Date?, _ end: Date?) -> Int? {
