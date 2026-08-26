@@ -11,6 +11,13 @@ import Glibc
 /// code). Good enough to exercise the real `URLSessionTaskDelegate` capture path; not a
 /// general-purpose HTTP server (no persistent connections, no chunked bodies, no pipelining).
 final class MockHTTPServer {
+    struct Request {
+        let method: String
+        let path: String
+        let headers: [String: String]
+        let body: Data
+    }
+
     enum Behavior {
         case respond(status: Int, headers: [String: String] = [:], body: Data = Data())
         /// Accepts the connection but never writes a response — the client-side request
@@ -23,9 +30,15 @@ final class MockHTTPServer {
     private let acceptQueue = DispatchQueue(label: "mock-http-server.accept")
     private let connectionQueue = DispatchQueue(label: "mock-http-server.connections", attributes: .concurrent)
     private var isRunning = false
-    private var handler: (_ method: String, _ path: String) -> Behavior
+    private var handler: (Request) -> Behavior
 
-    init(handler: @escaping (String, String) -> Behavior = { _, _ in .respond(status: 200) }) {
+    /// `simpleHandler`, if provided, only looks at method/path — kept for call sites that
+    /// don't care about headers/body (most of feat-003's tests).
+    convenience init(handler simpleHandler: @escaping (String, String) -> Behavior) {
+        self.init { request in simpleHandler(request.method, request.path) }
+    }
+
+    init(handler: @escaping (Request) -> Behavior = { _ in .respond(status: 200) }) {
         self.handler = handler
     }
 
@@ -78,16 +91,9 @@ final class MockHTTPServer {
 
     private func handle(clientFD: Int32) {
         defer { close(clientFD) }
-        var buffer = [UInt8](repeating: 0, count: 8192)
-        let n = read(clientFD, &buffer, buffer.count)
-        guard n > 0, let request = String(bytes: buffer[0..<n], encoding: .utf8) else { return }
+        guard let request = readRequest(clientFD: clientFD) else { return }
 
-        let requestLine = request.split(separator: "\r\n", maxSplits: 1).first.map(String.init) ?? ""
-        let parts = requestLine.split(separator: " ")
-        let method = parts.count > 0 ? String(parts[0]) : "GET"
-        let path = parts.count > 1 ? String(parts[1]) : "/"
-
-        switch handler(method, path) {
+        switch handler(request) {
         case .respond(let status, let headers, let body):
             writeResponse(clientFD: clientFD, status: status, headers: headers, body: body)
         case .hang:
@@ -95,6 +101,51 @@ final class MockHTTPServer {
             // uses a short timeoutIntervalForRequest, so the client sees a real timeout.
             Thread.sleep(forTimeInterval: 5)
         }
+    }
+
+    /// Reads until the header terminator is seen, then keeps reading until `Content-Length`
+    /// worth of body has arrived — a single `read()` isn't guaranteed to return the whole
+    /// request in one call, especially for gzip-compressed bodies larger than one TCP segment.
+    private func readRequest(clientFD: Int32) -> Request? {
+        var buffer = Data()
+        var headerEnd: Range<Data.Index>?
+        let terminator = Data("\r\n\r\n".utf8)
+
+        while headerEnd == nil {
+            var chunk = [UInt8](repeating: 0, count: 8192)
+            let n = read(clientFD, &chunk, chunk.count)
+            guard n > 0 else { return nil }
+            buffer.append(contentsOf: chunk[0..<n])
+            headerEnd = buffer.range(of: terminator)
+        }
+
+        guard let headerEnd, let headerText = String(data: buffer[..<headerEnd.lowerBound], encoding: .utf8) else {
+            return nil
+        }
+
+        let lines = headerText.components(separatedBy: "\r\n")
+        let requestLineParts = (lines.first ?? "").split(separator: " ")
+        let method = requestLineParts.count > 0 ? String(requestLineParts[0]) : "GET"
+        let path = requestLineParts.count > 1 ? String(requestLineParts[1]) : "/"
+
+        var headers: [String: String] = [:]
+        for line in lines.dropFirst() where !line.isEmpty {
+            guard let colon = line.firstIndex(of: ":") else { continue }
+            let key = String(line[line.startIndex..<colon]).trimmingCharacters(in: .whitespaces)
+            let value = String(line[line.index(after: colon)...]).trimmingCharacters(in: .whitespaces)
+            headers[key] = value
+        }
+
+        let contentLength = Int(headers["Content-Length"] ?? "0") ?? 0
+        var body = buffer[headerEnd.upperBound...]
+        while body.count < contentLength {
+            var chunk = [UInt8](repeating: 0, count: 8192)
+            let n = read(clientFD, &chunk, chunk.count)
+            guard n > 0 else { break }
+            body.append(contentsOf: chunk[0..<n])
+        }
+
+        return Request(method: method, path: path, headers: headers, body: Data(body))
     }
 
     private func writeResponse(clientFD: Int32, status: Int, headers: [String: String], body: Data) {

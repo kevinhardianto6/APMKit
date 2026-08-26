@@ -4,6 +4,13 @@
 > `NetworkCaptureDelegate` now also captures the raw query string (appended to `path`) and
 > raw request/response headers (`req_headers`/`res_headers`), so SEC-02/03 have live data to
 > filter. Capture stays raw/unfiltered by design — `Scrubber` is the sole enforcement point.
+>
+> **Amended again 2026-08-24 under feat-005's review** (see `archive/features/feat-005.md`):
+> `APM.instrumentedSession()`'s `excludedHosts: Set<String> = []` became a required
+> `ingestEndpoint: IngestEndpoint` parameter (plus optional `additionalExcludedHosts`) — the
+> ingest host is now excluded from capture automatically, computed internally, rather than
+> relying on the caller to remember to list it. MOB-09/10 anti-loop is enforced by
+> construction, not by integration discipline.
 
 - **Status:** ✅ done · closed 2026-08-24 · **Depends on:** feat-001, feat-002
 - **Requirements:** `URLSessionTaskDelegate` + `URLSessionTaskMetrics`; per-phase timings

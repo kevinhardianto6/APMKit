@@ -8,7 +8,7 @@
 
 | Epic | Progress | Active / open |
 |------|:--------:|---------------|
-| APM Kit iOS SDK | 4/10 | — |
+| APM Kit iOS SDK | 5/10 | feat-006 🔵 |
 
 ---
 
@@ -30,8 +30,8 @@ feature per branch/PR; stop for review after each.
 | feat-002 | Disk Queue | ✅ | Kevin Hardianto | feat-001 | MOB-04/05/06, SEC-07 | [archive](archive/features/feat-002.md) |
 | feat-003 | Network Capture | ✅ | Kevin Hardianto | feat-001, feat-002 | MOB-01/02/03/10, MOB-02b | [archive](archive/features/feat-003.md) |
 | feat-004 | Scrubbing | ✅ | Kevin Hardianto | feat-003 | SEC-01..05b | [archive](archive/features/feat-004.md) |
-| feat-005 | Sync Engine | 🟡 | — | feat-002, feat-004 | MOB-07/08/09 | — |
-| feat-006 | Identifier & Manual API | 🟡 | — | feat-001, feat-004 | MOB-28, SEC-06 | — |
+| feat-005 | Sync Engine | ✅ | Kevin Hardianto | feat-002, feat-004 | MOB-07/08/09 | [archive](archive/features/feat-005.md) |
+| feat-006 | Identifier & Manual API | 🔵 | Kevin Hardianto | feat-001, feat-004 | MOB-28, SEC-06 | — |
 | feat-007 | Breadcrumbs | 🟡 | — | feat-004, feat-006 | MOB-11/12/13 | — |
 | feat-008 | Device Integrity | 🟡 | — | feat-001 | MOB-29/30/31 | — |
 | feat-009 | Crash Reporting (KSCrash) | 🟡 | — | feat-001..008 | MOB-15/16/17 | — |
@@ -40,24 +40,9 @@ feature per branch/PR; stop for review after each.
 > feat-001..008 = end of Phase 1 (SDK shippable for network observability). feat-009/010 =
 > Phase 2. feat-009 may span several PRs (sub-split as needed) — do not rush the crash handler.
 
-### feat-005 · Sync Engine
-
-- **Status:** 🟡 not started · **Depends on:** feat-002, feat-004
-- **Requirements:** batched upload (≤200 events/≤1MB gzip via Compression) on timer,
-  background transition, connectivity restore; exponential backoff. Exact response contract
-  (`01` §7): 202 delete, 400 drop (no infinite retry), 401/403 pause 24h, 413 split, 429 honor
-  Retry-After, 5xx backoff+keep. Delete local events only after 2xx. Separate non-instrumented
-  `URLSession`; ingest host excluded from capture (anti-loop). MOB-07/08/09.
-- **Done when:** buffers offline, flushes on reconnect; every response code handled; no
-  instrumentation loop (tests w/ mock server).
-
-**Decisions** — none yet. **Blockers** — none.
-
----
-
 ### feat-006 · Identifier & Manual API
 
-- **Status:** 🟡 not started · **Depends on:** feat-001, feat-004
+- **Status:** 🔵 in progress · **Depends on:** feat-001 ✅, feat-004 ✅
 - **Requirements:** `APM.setUser(id:)` takes any free-form string, sent **raw** in
   `envelope.user_id` over TLS, never hashed client-side (hashing to `user_ref` is backend's
   job). Fallback: stable random id persisted per install if never set. Raw `user_id` must

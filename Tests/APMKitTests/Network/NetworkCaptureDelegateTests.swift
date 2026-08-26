@@ -40,6 +40,13 @@ struct NetworkCaptureDelegateTests {
         return nil
     }
 
+    /// A placeholder ingest endpoint for tests that don't care about anti-loop exclusion
+    /// themselves — `ingestEndpoint` is a required parameter on `instrumentedSession()`, so
+    /// every call site needs one even when the test target host is unrelated to it.
+    private func dummyIngestEndpoint() -> IngestEndpoint {
+        IngestEndpoint(url: URL(string: "https://ingest.example.invalid/v1/ingest")!, appKey: "unused")
+    }
+
     // MARK: - Real requests (docs/02 §3.1 "menangkap metrik seluruh HTTP request")
 
     @Test("a successful real request produces a network event with the exact §4.1 fields")
@@ -49,7 +56,7 @@ struct NetworkCaptureDelegateTests {
         defer { server.stop() }
 
         let sink = CollectingEventSink()
-        let (session, _) = APM.instrumentedSession(sink: sink, sessionManager: SessionManager())
+        let (session, _) = APM.instrumentedSession(sink: sink, sessionManager: SessionManager(), ingestEndpoint: dummyIngestEndpoint())
 
         let url = URL(string: "http://127.0.0.1:\(server.port)/hello")!
         session.dataTask(with: url).resume()
@@ -72,7 +79,7 @@ struct NetworkCaptureDelegateTests {
         defer { server.stop() }
 
         let sink = CollectingEventSink()
-        let (session, _) = APM.instrumentedSession(sink: sink, sessionManager: SessionManager())
+        let (session, _) = APM.instrumentedSession(sink: sink, sessionManager: SessionManager(), ingestEndpoint: dummyIngestEndpoint())
 
         let url = URL(string: "http://127.0.0.1:\(server.port)/broken")!
         session.dataTask(with: url).resume()
@@ -99,7 +106,7 @@ struct NetworkCaptureDelegateTests {
         let sink = CollectingEventSink()
         let configuration = URLSessionConfiguration.default
         configuration.timeoutIntervalForRequest = 0.3
-        let (session, _) = APM.instrumentedSession(configuration: configuration, sink: sink, sessionManager: SessionManager())
+        let (session, _) = APM.instrumentedSession(configuration: configuration, sink: sink, sessionManager: SessionManager(), ingestEndpoint: dummyIngestEndpoint())
 
         let url = URL(string: "http://127.0.0.1:\(server.port)/slow")!
         session.dataTask(with: url).resume()
@@ -119,7 +126,7 @@ struct NetworkCaptureDelegateTests {
         defer { server.stop() }
 
         let sink = CollectingEventSink()
-        let (session, _) = APM.instrumentedSession(sink: sink, sessionManager: SessionManager())
+        let (session, _) = APM.instrumentedSession(sink: sink, sessionManager: SessionManager(), ingestEndpoint: dummyIngestEndpoint())
 
         let url = URL(string: "http://127.0.0.1:\(server.port)/slow")!
         let task = session.dataTask(with: url)
@@ -132,19 +139,44 @@ struct NetworkCaptureDelegateTests {
         #expect(string(events.first!, "failure_category") == "cancelled")
     }
 
-    @Test("hosts in excludedHosts are never captured (MOB-10 anti-loop)")
-    func excludedHostsAreNotCaptured() async throws {
+    @Test("hosts in additionalExcludedHosts are never captured (MOB-10 anti-loop)")
+    func additionalExcludedHostsAreNotCaptured() async throws {
         let server = MockHTTPServer { _, _ in .respond(status: 200) }
         try server.start()
         defer { server.stop() }
 
         let sink = CollectingEventSink()
         let (session, _) = APM.instrumentedSession(
-            sink: sink, sessionManager: SessionManager(), excludedHosts: ["127.0.0.1"]
+            sink: sink, sessionManager: SessionManager(),
+            ingestEndpoint: dummyIngestEndpoint(), additionalExcludedHosts: ["127.0.0.1"]
         )
 
         let url = URL(string: "http://127.0.0.1:\(server.port)/hello")!
         session.dataTask(with: url).resume()
+
+        // Give the delegate callback a moment to (not) fire, then assert nothing arrived.
+        try await Task.sleep(nanoseconds: 300_000_000)
+        #expect(sink.events.isEmpty)
+    }
+
+    @Test("MOB-09/MOB-10 anti-loop: an instrumented session hitting its OWN configured ingest host is never captured, with no manual excludedHosts step")
+    func ingestHostIsExcludedAutomatically() async throws {
+        // The ingest "server" — hitting it directly is exactly what SyncEngine's uploads do.
+        let server = MockHTTPServer { _, _ in .respond(status: 202) }
+        try server.start()
+        defer { server.stop() }
+
+        let sink = CollectingEventSink()
+        let ingestEndpoint = IngestEndpoint(
+            url: URL(string: "http://127.0.0.1:\(server.port)/v1/ingest")!,
+            appKey: "test-key"
+        )
+        // Deliberately does NOT pass additionalExcludedHosts — the ingest host must be
+        // excluded purely because it's the required `ingestEndpoint`, proving the guarantee
+        // doesn't depend on the caller remembering a separate step.
+        let (session, _) = APM.instrumentedSession(sink: sink, sessionManager: SessionManager(), ingestEndpoint: ingestEndpoint)
+
+        session.dataTask(with: ingestEndpoint.url).resume()
 
         // Give the delegate callback a moment to (not) fire, then assert nothing arrived.
         try await Task.sleep(nanoseconds: 300_000_000)

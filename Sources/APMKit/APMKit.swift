@@ -7,8 +7,15 @@ public enum APM {
     /// are handed to `sink` — normally the scrubber in front of the disk queue (feat-004),
     /// never the disk queue directly (`CONSTITUTION.md`: Capture → Scrub → Disk → Sync).
     ///
-    /// - Parameter excludedHosts: hosts never captured on this session — always include the
-    ///   ingest host once it's configured (feat-005, MOB-10 anti-loop).
+    /// - Parameter ingestEndpoint: APM Kit's own upload destination. **Required, not
+    ///   optional** — its host is automatically added to the exclusion set (MOB-10/MOB-09
+    ///   anti-loop), so a host app cannot construct an instrumented session that ends up
+    ///   capturing its own upload traffic. This is deliberate: an anti-loop guarantee that
+    ///   depends on the integrator remembering a separate step is not a guarantee. Pass the
+    ///   same `IngestEndpoint` used to build the `IngestClient` for sync (feat-005) — that's
+    ///   what keeps the two in sync with each other.
+    /// - Parameter additionalExcludedHosts: any other hosts to exclude beyond the ingest host
+    ///   (e.g. a symbol-upload endpoint, once one exists).
     /// - Parameter pinningDelegate: host app's certificate-pinning logic, if any. See
     ///   `NetworkCaptureForwardingDelegate`.
     /// - Returns: the session, plus the capture delegate in case the caller needs to attach
@@ -17,9 +24,15 @@ public enum APM {
         configuration: URLSessionConfiguration = .default,
         sink: EventSink,
         sessionManager: SessionManager,
-        excludedHosts: Set<String> = [],
+        ingestEndpoint: IngestEndpoint,
+        additionalExcludedHosts: Set<String> = [],
         pinningDelegate: NetworkCaptureForwardingDelegate? = nil
     ) -> (session: URLSession, captureDelegate: NetworkCaptureDelegate) {
+        var excludedHosts = additionalExcludedHosts
+        if let ingestHost = ingestEndpoint.url.host {
+            excludedHosts.insert(ingestHost)
+        }
+
         let captureDelegate = NetworkCaptureDelegate(
             sink: sink,
             sessionManager: sessionManager,

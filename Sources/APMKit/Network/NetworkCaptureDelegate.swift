@@ -19,8 +19,10 @@ public final class NetworkCaptureDelegate: NSObject, URLSessionTaskDelegate {
     private let sink: EventSink
     private let sessionManager: SessionManager
     /// Hosts never captured, even on an instrumented session — MOB-10 anti-loop: the SDK's
-    /// own ingest host (wired in by feat-005) must never be instrumented, or every upload
-    /// would generate an event that needs uploading.
+    /// own ingest host must never be instrumented, or every upload would generate an event
+    /// that needs uploading. `APM.instrumentedSession()` computes this automatically from its
+    /// required `ingestEndpoint` parameter — this initializer itself stays low-level/testable
+    /// and doesn't know about `IngestEndpoint`.
     private let excludedHosts: Set<String>
 
     private let stateQueue = DispatchQueue(label: "kit.apm.networkcapture.state")

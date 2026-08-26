@@ -21,7 +21,10 @@ struct PipelineEndToEndTests {
         let diskQueue = try FileDiskQueue(directoryURL: dir)
         let scrubber = Scrubber(downstream: DiskQueueEventSink(diskQueue: diskQueue))
 
-        let (session, _) = APM.instrumentedSession(sink: scrubber, sessionManager: SessionManager())
+        let (session, _) = APM.instrumentedSession(
+            sink: scrubber, sessionManager: SessionManager(),
+            ingestEndpoint: .init(url: URL(string: "https://ingest.example.invalid/v1/ingest")!, appKey: "unused")
+        )
 
         var request = URLRequest(url: URL(string: "http://127.0.0.1:\(server.port)/user/628123456789/profile?msisdn=081234567890&page=2")!)
         request.setValue("Bearer super-secret-token-xyz", forHTTPHeaderField: "Authorization")
