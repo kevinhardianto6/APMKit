@@ -4,7 +4,8 @@ import Foundation
 /// Every field is injectable so `SyncEngine` doesn't need to know how any of them are
 /// produced — `user_id` defaults to `UserIdentity.currentUserId()` (feat-006: the explicit
 /// value from `APM.setUser`, or a stable per-install fallback); `integrity` defaults to
-/// `.unset` since real detection lands in feat-008.
+/// `sessionManager.currentIntegritySnapshot()` (feat-008: real detection, cached once per
+/// session by `SessionManager` itself).
 public struct EnvelopeFactory {
     private let sessionManager: SessionManager
     private let appInfo: () -> AppInfo
@@ -17,14 +18,16 @@ public struct EnvelopeFactory {
         sessionManager: SessionManager,
         appInfo: @escaping () -> AppInfo = { AppInfo.current() },
         deviceInfo: @escaping () -> DeviceInfo = { DeviceInfo.current() },
-        integrity: @escaping () -> IntegritySnapshot = { .unset },
+        integrity: (() -> IntegritySnapshot)? = nil,
         installId: @escaping () -> String = { InstallIdentity.current() },
         userId: @escaping () -> String? = { UserIdentity.currentUserId() }
     ) {
         self.sessionManager = sessionManager
         self.appInfo = appInfo
         self.deviceInfo = deviceInfo
-        self.integrity = integrity
+        // Can't reference `sessionManager` in a parameter default expression, so the
+        // session-cached-snapshot default is resolved here instead of at the call site.
+        self.integrity = integrity ?? { sessionManager.currentIntegritySnapshot() }
         self.installId = installId
         self.userId = userId
     }

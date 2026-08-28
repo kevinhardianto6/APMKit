@@ -55,4 +55,59 @@ struct SessionManagerTests {
         manager.appWillEnterForeground()
         #expect(manager.sessionId == original)
     }
+
+    // MARK: - Integrity snapshot caching (feat-008, MOB-29..31: "once per session")
+
+    @Test("currentIntegritySnapshot computes once and reuses the cached value on later calls")
+    func integritySnapshotComputedOnce() {
+        let manager = SessionManager()
+        var computeCount = 0
+        let compute: () -> IntegritySnapshot = {
+            computeCount += 1
+            return .unset
+        }
+
+        _ = manager.currentIntegritySnapshot(compute: compute)
+        _ = manager.currentIntegritySnapshot(compute: compute)
+        _ = manager.currentIntegritySnapshot(compute: compute)
+
+        #expect(computeCount == 1)
+    }
+
+    @Test("currentIntegritySnapshot is invalidated when the session rotates (long background)")
+    func integritySnapshotInvalidatedOnSessionRotation() {
+        let manager = SessionManager()
+        var computeCount = 0
+        let compute: () -> IntegritySnapshot = {
+            computeCount += 1
+            return .unset
+        }
+        _ = manager.currentIntegritySnapshot(compute: compute)
+        #expect(computeCount == 1)
+
+        let t0 = Date()
+        manager.appDidEnterBackground(at: t0)
+        manager.appWillEnterForeground(at: t0.addingTimeInterval(31)) // rotates the session
+
+        _ = manager.currentIntegritySnapshot(compute: compute)
+        #expect(computeCount == 2)
+    }
+
+    @Test("currentIntegritySnapshot is NOT invalidated by a short background (session doesn't rotate)")
+    func integritySnapshotSurvivesShortBackground() {
+        let manager = SessionManager()
+        var computeCount = 0
+        let compute: () -> IntegritySnapshot = {
+            computeCount += 1
+            return .unset
+        }
+        _ = manager.currentIntegritySnapshot(compute: compute)
+
+        let t0 = Date()
+        manager.appDidEnterBackground(at: t0)
+        manager.appWillEnterForeground(at: t0.addingTimeInterval(5)) // does NOT rotate
+
+        _ = manager.currentIntegritySnapshot(compute: compute)
+        #expect(computeCount == 1)
+    }
 }

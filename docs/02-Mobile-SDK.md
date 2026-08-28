@@ -90,10 +90,16 @@ SDK yang di-embed ke aplikasi iOS & Android, bertugas menangkap event, menyimpan
 | ID | Requirement | Prio |
 |---|---|---|
 | MOB-11 | API publik: `logError(error, context)` dan `breadcrumb(message, category)` | P0 |
-| MOB-12 | Breadcrumb otomatis: perpindahan screen, lifecycle app, perubahan konektivitas | P0 |
+| MOB-12 | Breadcrumb otomatis untuk **lifecycle app** dan **perubahan konektivitas** (benar-benar otomatis, tanpa aksi app host). Untuk **perpindahan screen**: di iOS bersifat *host-invoked* — SDK menyediakan primitive `recordScreen(_:)` plus helper opt-in (base class UIViewController & view modifier SwiftUI), **tanpa method swizzling**. Di Android perpindahan screen bisa otomatis via `ActivityLifecycleCallbacks`. | P0 |
 | MOB-13 | Ring buffer breadcrumb: 100 entri terakhir, dilampirkan ke setiap crash/error | P0 |
 | MOB-26 | Mode debug: log lokal berisi event yang tertangkap, non-aktif di build release | P1 |
 | MOB-28 | API `setUser(id)` untuk app host menetapkan `user_id` (string bebas). Jika tidak di-set, generate ID acak stabil per install sebagai fallback. `user_id` dikirim mentah di envelope; hashing dilakukan backend (BE-21). | P0 |
+
+> **Kenapa screen tracking di iOS tidak "otomatis" (MOB-12).** Satu-satunya cara membuatnya benar-benar otomatis di iOS adalah *method swizzling* `UIViewController.viewDidAppear`. Itu ditolak: teknik ini mengganti implementasi method sistem saat runtime, berisiko crash/undefined behavior, dan **bentrok dengan SDK lain yang melakukan hal sama** (Firebase Analytics sudah men-swizzle method ini di aplikasi kita). Karena SDK ini dipasang di aplikasi tim lain, kegagalan seperti itu akan dilimpahkan ke kita dan mematikan adopsi (G4) — melanggar batasan mutlak "SDK tidak boleh menjadi penyebab crash aplikasi host".
+>
+> Konsekuensinya: integrasi screen tracking adalah **satu-satunya langkah yang tidak nol-effort**, jadi harus ditulis menonjol di dokumen integrasi (MOB-25), bukan sebagai catatan kaki. Nama screen berasal dari developer → tetap wajib melewati Scrubber (SEC-05).
+>
+> **Catatan paritas:** perbedaan iOS vs Android di sini disengaja. Android punya `ActivityLifecycleCallbacks` yang resmi dan aman, jadi di sana screen tracking memang otomatis. Yang wajib identik adalah *output*-nya (event breadcrumb dengan `category: navigation`), bukan cara memicunya.
 
 ### 3.5 Crash Reporting — Fase 2
 
@@ -132,7 +138,9 @@ Snapshot sekali per sesi saat startup, dilampirkan ke `integrity` di envelope (`
 |---|---|---|
 | MOB-29 | Deteksi **emulator/simulator** → `integrity.is_emulator`. iOS: `TARGET_OS_SIMULATOR` + cek model/env var. Android: heuristik build props (`FINGERPRINT`, `HARDWARE`=goldfish/ranchu, `MODEL`), file QEMU (`/dev/qemu_pipe`), sensor absen. | P1 |
 | MOB-30 | Deteksi **jailbreak/root** → `integrity.is_rooted`. iOS: cek file Cydia/Sileo, kemampuan tulis di luar sandbox, symlink mencurigakan. Android: cek binary `su`, paket Magisk/SuperSU, `test-keys` di build tags, partisi system writable. | P1 |
-| MOB-31 | Deteksi **developer mode** → `integrity.is_dev_mode` (+ `debugger_attached`). Android: `Settings.Global.DEVELOPMENT_SETTINGS_ENABLED` + `ADB_ENABLED` (API publik). iOS: debugger attached via `sysctl` (`P_TRACED`) + build non-App-Store (`embedded.mobileprovision`, TestFlight `sandboxReceipt`). | P1 |
+| MOB-31 | Deteksi **developer mode** → `integrity.is_dev_mode` **dan** `integrity.debugger_attached` sebagai **dua boolean independen** (bukan digabung dengan OR — schema `01` §2 memang menyediakan field terpisah). `debugger_attached`: debugger sedang menempel saat itu — iOS via `sysctl` (`P_TRACED`), Android via `Debug.isDebuggerConnected()`. `is_dev_mode`: environment non-produksi — iOS via build non-App-Store (`embedded.mobileprovision`, TestFlight `sandboxReceipt`), Android via `Settings.Global.DEVELOPMENT_SETTINGS_ENABLED` + `ADB_ENABLED`. | P1 |
+
+> **Kenapa dipisah (MOB-31).** Dua sinyal ini artinya berbeda dan berguna dibedakan saat menyaring sesi non-real: build TestFlight yang dipakai QA bisa berjalan **tanpa** debugger, sementara developer yang sedang nge-debug adalah kasus lain lagi. Menggabungkannya jadi satu OR akan membuang informasi itu dan membuat field `debugger_attached` di schema jadi mubazir.
 
 **Batas keandalan & aturan (wajib dibaca sebelum implementasi):**
 - Ketiganya **heuristik dan bisa diakali** — cukup untuk *observability* (menyaring/menandai sesi), **bukan** security gate. iOS simulator ~pasti terdeteksi; Android emulator & root bisa disembunyikan (Magisk DenyList dll.).

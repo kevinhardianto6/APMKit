@@ -39,4 +39,19 @@ struct EnvelopeFactoryTests {
         let envelope = factory.makeEnvelope(events: [])
         #expect(envelope.userId == "raw-user-id-value")
     }
+
+    @Test("default integrity comes from sessionManager.currentIntegritySnapshot(), cached across calls (feat-008)")
+    func defaultIntegrityUsesSessionCachedSnapshot() {
+        let sessionManager = SessionManager()
+        let factory = EnvelopeFactory(sessionManager: sessionManager)
+
+        // Prime the cache with a known value via the same SessionManager instance the
+        // factory holds, then confirm makeEnvelope reflects exactly that cached value
+        // rather than recomputing a fresh one.
+        let expected = IntegritySnapshot(isEmulator: true, isRooted: true, isDevMode: false, debuggerAttached: false)
+        _ = sessionManager.currentIntegritySnapshot(compute: { expected })
+
+        let envelope = factory.makeEnvelope(events: [])
+        #expect(envelope.integrity == expected)
+    }
 }

@@ -9,29 +9,20 @@
 
 - **Objective:** Build the APM Kit iOS SDK (Phase 1 network observability + Phase 2 crash
   reporting), per docs/00-02.
-- **Active feature:** feat-008 · Device Integrity
-- **Status:** 🔵 in progress
-- **Last verify:** `./verify.sh all` → `HARNESS_VERIFY: PASS (all)`, 2026-08-27 (baseline
-  before starting feat-008; feat-001..007 all ✅ and archived, 117 tests passing).
+- **Active feature:** none — Phase 1 (feat-001..008) complete and archived. Not yet started
+  feat-009.
+- **Status:** —
+- **Last verify:** `./verify.sh build` → `HARNESS_VERIFY: PASS (build)`, 2026-08-28. 131 tests
+  at last full run (feat-008 close); no code changed since, only docs/records.
 
 ## Next step
 
-Flagged to user: their claimed docs/02 update (MOB-12 split, no-swizzling rationale, Android
-parity note) isn't actually present in this repo's `docs/02-Mobile-SDK.md` — checked directly,
-unchanged. Not blocking feat-008.
-
-Building: `DeviceIntegrityDetector.snapshot()` → real `IntegritySnapshot` (feat-001's wire
-shape, currently `.unset` everywhere). Design split for honest testability: pure
-`JailbreakVerdict`/`DevModeVerdict` combination logic (portable, fully unit-tested truth
-tables) vs. the real OS-level probes (`#if os(iOS)`-gated — file/symlink checks, sandbox
-write attempt, provisioning-profile/receipt lookup — genuinely unverifiable via `swift test`
-on macOS, only on a real device/simulator). `isEmulator()` via `#if targetEnvironment
-(simulator)` — correct by construction but its `true` branch can't be exercised by `swift
-test` either (always compiles for macOS host, never Simulator). `debugger_attached` via
-`sysctl`+`P_TRACED`, made testable by injecting the raw process-flags read. "Once per
-session" requirement: caching lands in `SessionManager` (already owns session
-lifecycle/rotation), invalidated exactly when `appWillEnterForeground` rotates the session —
-`EnvelopeFactory`'s `integrity` default now reads from there instead of `.unset`.
+Phase 1 wrap-up written: `archive/epics/phase-1-wrap-up.md` — full MOB-/SEC- coverage
+accounting, explicit-scope deferrals vs. real unflagged gaps (performance budget unmeasured,
+SEC-08/10/11/12/14 pinning-on-ingest-connection and at-rest encryption, MOB-23/24 CocoaPods/
+semver), and the running manual-device-verification list. Ready to start feat-009 (Crash
+Reporting / KSCrash) whenever asked — highest-risk feature per `CONSTITUTION.md` (only
+component allowed to run during an actual crash), expect it to span several PRs.
 
 ## Parked
 
@@ -49,8 +40,9 @@ lifecycle/rotation), invalidated exactly when `appWillEnterForeground` rotates t
 
 | File | Change | Why |
 |------|--------|-----|
-| `archive/features/feat-007.md` | Added | Rotated feat-007 detail on closing it |
-| `archive/sessions/2026-08-27-feat-007.md` | Added | Rotated prior session's Changes table; noted the docs/02 discrepancy |
-| `FEATURES.md` | feat-007 → ✅ (archived); feat-008 → 🔵 in progress; fixed a leftover duplicate block from an earlier edit | User approved feat-007 |
+| `archive/features/feat-008.md` | Added | Rotated feat-008 detail on closing it |
+| `archive/sessions/2026-08-28-feat-008-phase1-wrapup.md` | Added | Rotated prior session's Changes table |
+| `archive/epics/phase-1-wrap-up.md` | Added | Full Phase 1 requirement accounting |
+| `FEATURES.md` | feat-008 → ✅ (archived); pointer to wrap-up added | Phase 1 complete |
 
 _Ground truth: run `git diff --stat` to confirm this table matches reality._

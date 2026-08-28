@@ -14,6 +14,7 @@ public final class SessionManager {
     private(set) public var sessionId: String
     private var backgroundedAt: Date?
     private var seqCounter: Int = 0
+    private var cachedIntegritySnapshot: IntegritySnapshot?
 
     public init(initialSessionId: String = UUID().uuidString) {
         self.sessionId = initialSessionId
@@ -32,6 +33,7 @@ public final class SessionManager {
         if now.timeIntervalSince(backgroundedAt) > Self.backgroundResetThreshold {
             sessionId = UUID().uuidString
             seqCounter = 0
+            cachedIntegritySnapshot = nil // MOB-29..31: re-snapshot once per NEW session
         }
     }
 
@@ -39,5 +41,18 @@ public final class SessionManager {
     public func nextSequenceNumber() -> Int {
         seqCounter += 1
         return seqCounter
+    }
+
+    /// `envelope.integrity` (docs/01 §2, MOB-29/30/31), snapshotted once per session — cached
+    /// here since `SessionManager` already owns session lifecycle/rotation, and invalidated
+    /// exactly when `appWillEnterForeground` rotates to a new session. `compute` is
+    /// injectable for tests; real callers use the default, `DeviceIntegrityDetector.snapshot()`.
+    public func currentIntegritySnapshot(compute: () -> IntegritySnapshot = { DeviceIntegrityDetector.snapshot() }) -> IntegritySnapshot {
+        if let cachedIntegritySnapshot {
+            return cachedIntegritySnapshot
+        }
+        let snapshot = compute()
+        cachedIntegritySnapshot = snapshot
+        return snapshot
     }
 }

@@ -27,13 +27,17 @@ re-run 3× clean.
   (host-invoked), plus two opt-in convenience layers so it isn't per-screen boilerplate —
   `APMTrackedViewController` (subclass instead of `UIViewController`, defaults the screen name
   to the type name) and `View.apmScreen(_:)` (SwiftUI `.onAppear` wrapper).
-  **2026-08-27: user says docs/02 was updated on their side** (MOB-12 split into
-  genuinely-automatic sources vs. host-invoked screen tracking, no-swizzling rationale
-  recorded, plus an Android parity note that `ActivityLifecycleCallbacks` may keep screen
-  tracking automatic there). **Not actually reflected in this repo's `docs/02-Mobile-SDK.md`**
-  as of this close — checked directly (`grep` for "swizzl"/"ActivityLifecycleCallbacks"/
-  "host-invoked", MOB-12's line unchanged). Flagged back to the user rather than silently
-  treating the doc as updated; likely sitting in an un-synced copy.
+  **2026-08-27: user said docs/02 was updated on their side, but it wasn't actually reflected
+  in this repo's `docs/02-Mobile-SDK.md` at the time** — checked directly (`grep` for
+  "swizzl"/"ActivityLifecycleCallbacks"/"host-invoked", MOB-12's line unchanged), flagged
+  back rather than silently treating the doc as updated. **2026-08-28: now confirmed landed**
+  — `docs/02-Mobile-SDK.md` MOB-12 was updated exactly as described: split into
+  genuinely-automatic sources (lifecycle, connectivity) vs. host-invoked screen tracking, with
+  the no-swizzling rationale recorded verbatim (naming Firebase's own `viewDidAppear`
+  swizzling as the concrete conflict risk) and an explicit Android parity note that
+  `ActivityLifecycleCallbacks` can keep screen tracking automatic there, with only the
+  breadcrumb *output* (category `navigation`) required to match across platforms, not the
+  trigger mechanism. No code change needed — the implementation already matched.
 - **Breadcrumbs are never queued as their own disk `Event`.** They live only in
   `BreadcrumbRingBuffer` (in-memory) until `ManualReporter.logError` (or, later, feat-009's
   crash handler) JSON-serializes a snapshot into the resulting `error` event's `breadcrumbs`

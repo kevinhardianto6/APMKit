@@ -8,7 +8,7 @@
 
 | Epic | Progress | Active / open |
 |------|:--------:|---------------|
-| APM Kit iOS SDK | 7/10 | feat-008 🔵 |
+| APM Kit iOS SDK | 8/10 | — (Phase 1 complete) |
 
 ---
 
@@ -33,27 +33,16 @@ feature per branch/PR; stop for review after each.
 | feat-005 | Sync Engine | ✅ | Kevin Hardianto | feat-002, feat-004 | MOB-07/08/09 | [archive](archive/features/feat-005.md) |
 | feat-006 | Identifier & Manual API | ✅ | Kevin Hardianto | feat-001, feat-004 | MOB-28, SEC-06 | [archive](archive/features/feat-006.md) |
 | feat-007 | Breadcrumbs | ✅ | Kevin Hardianto | feat-004, feat-006 | MOB-11/12/13 | [archive](archive/features/feat-007.md) |
-| feat-008 | Device Integrity | 🔵 | Kevin Hardianto | feat-001 | MOB-29/30/31 | — |
+| feat-008 | Device Integrity | ✅ | Kevin Hardianto | feat-001 | MOB-29/30/31 | [archive](archive/features/feat-008.md) |
 | feat-009 | Crash Reporting (KSCrash) | 🟡 | — | feat-001..008 | MOB-15/16/17 | — |
 | feat-010 | Stability + Remote Control | 🟡 | — | feat-005, feat-009 | MOB-18/19/20/21/27 | — |
 
 > feat-001..008 = end of Phase 1 (SDK shippable for network observability). feat-009/010 =
 > Phase 2. feat-009 may span several PRs (sub-split as needed) — do not rush the crash handler.
 
-### feat-008 · Device Integrity
-
-- **Status:** 🔵 in progress · **Depends on:** feat-001 ✅
-- **Requirements:** snapshot once per session into `envelope.integrity`: `is_emulator`
-  (`TARGET_OS_SIMULATOR`/env), `is_rooted` (jailbreak file checks + sandbox-write test +
-  suspicious symlinks), `is_dev_mode` (debugger via `sysctl` `P_TRACED` + non-App-Store build
-  via `embedded.mobileprovision`/TestFlight `sandboxReceipt`), `debugger_attached`. Heuristic
-  only — no privileged APIs (no IMEI). MOB-29/30/31.
-- **Done when:** flags correct on real device + simulator (manual verification required —
-  simulator-only automation can't fully prove real-device jailbreak/dev-mode detection).
-
-**Decisions** — none yet. **Blockers** — none.
-
----
+> **Phase 1 complete 2026-08-28** (feat-001..008, all ✅). Wrap-up — MOB-/SEC- coverage,
+> deferrals, and the running manual-device-verification list — recorded in
+> `archive/epics/phase-1-wrap-up.md`.
 
 ### feat-009 · Crash Reporting (KSCrash)
 
