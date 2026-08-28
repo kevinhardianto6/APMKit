@@ -8,7 +8,7 @@
 
 | Epic | Progress | Active / open |
 |------|:--------:|---------------|
-| APM Kit iOS SDK | 8/10 | — (Phase 1 complete) |
+| APM Kit iOS SDK | 9/10 | feat-010 |
 
 ---
 
@@ -34,30 +34,18 @@ feature per branch/PR; stop for review after each.
 | feat-006 | Identifier & Manual API | ✅ | Kevin Hardianto | feat-001, feat-004 | MOB-28, SEC-06 | [archive](archive/features/feat-006.md) |
 | feat-007 | Breadcrumbs | ✅ | Kevin Hardianto | feat-004, feat-006 | MOB-11/12/13 | [archive](archive/features/feat-007.md) |
 | feat-008 | Device Integrity | ✅ | Kevin Hardianto | feat-001 | MOB-29/30/31 | [archive](archive/features/feat-008.md) |
-| feat-009 | Crash Reporting (KSCrash) | 🟡 | — | feat-001..008 | MOB-15/16/17 | — |
+| feat-009 | Crash Reporting (KSCrash) | ✅ | Kevin Hardianto | feat-001..008 | MOB-15/16/17 | [archive](archive/features/feat-009.md) |
 | feat-010 | Stability + Remote Control | 🟡 | — | feat-005, feat-009 | MOB-18/19/20/21/27 | — |
 
 > feat-001..008 = end of Phase 1 (SDK shippable for network observability). feat-009/010 =
-> Phase 2. feat-009 may span several PRs (sub-split as needed) — do not rush the crash handler.
+> Phase 2.
 
 > **Phase 1 complete 2026-08-28** (feat-001..008, all ✅). Wrap-up — MOB-/SEC- coverage,
 > deferrals, and the running manual-device-verification list — recorded in
 > `archive/epics/phase-1-wrap-up.md`.
 
-### feat-009 · Crash Reporting (KSCrash)
-
-- **Status:** 🟡 not started · **Depends on:** feat-001, feat-002, feat-003, feat-004,
-  feat-005, feat-006, feat-007, feat-008 (end of Phase 1)
-- **Requirements:** wrap KSCrash (do not hand-roll signal/mach handlers). On crash, write a
-  minimal report to disk (no PII), send on next launch; include `binary_images` + UUIDs for
-  later symbolication. MOB-15/16/17. May span several PRs — sub-split as needed; this is the
-  highest-risk feature (crash handler is the sole component intentionally running during a
-  crash, per `CONSTITUTION.md`).
-- **Done when:** a forced crash is captured and appears in the mock backend after relaunch;
-  raw on-disk report is minimal (no PII) — see docs/02 §6.2 trade-off box on why the raw crash
-  report is unencrypted at write time.
-
-**Decisions** — none yet. **Blockers** — none.
+> **feat-009 complete 2026-08-28** (3 PRs — install/pipeline, macOS-host verification, real
+> iOS Simulator verification). Full detail: `archive/features/feat-009.md`.
 
 ---
 
@@ -73,6 +61,24 @@ feature per branch/PR; stop for review after each.
 **Decisions** — none yet. **Blockers** — none.
 
 ---
+
+## Manual verification checklist (pilot)
+
+Everything below compiles and its *logic* is unit-tested on the macOS host toolchain
+(`swift test`), but the real OS-level/device behavior can't be exercised that way and needs an
+actual iOS Simulator or device run. This is the running pre-ship checklist for the pilot app —
+update rows in place as items get verified (or newly found); don't scatter new ones into
+per-feature notes or archive files. Originally split across `archive/epics/phase-1-wrap-up.md`
+and feat-009's Blockers; consolidated here 2026-08-28 so it's one list, not several.
+
+| # | Item | From | Status |
+|---|------|------|--------|
+| 1 | Integrity probes: `isRooted()`'s real file/symlink/sandbox-write checks, `isDevMode()`'s provisioning-profile/receipt lookup, `isEmulator()`'s `true` branch (only reachable compiled for Simulator). Only the pure `JailbreakVerdict`/`DevModeVerdict` combination logic is proven by `swift test`. | feat-008 | ☐ not verified |
+| 2 | OS-level automatic breadcrumb firing: real `UIApplication` lifecycle notifications and real `NWPathMonitor` connectivity transitions actually invoking `AutomaticBreadcrumbSource`'s `recordLifecycle`/`recordConnectivity`. Only the mapping logic is proven by `swift test`. | feat-007 | ☐ not verified |
+| 3 | SEC-07's `FileProtectionType`: protection level and backup-exclusion flag have no observable effect on the macOS test host; needs a real-device/simulator file-attribute check. | feat-002 | ☐ not verified |
+| 4 | docs/02 §7 Fase 1 scenarios not covered by any automated test: disk full (real `ENOSPC`, not just the SDK's own size cap), and force-quit specifically *during* an in-flight upload (offline buffering itself is tested; the exact "killed mid-HTTP-request" timing is not). | feat-002, feat-005 | ☐ not verified |
+| 5 | Performance budget (docs/02 §5): app-size delta, cold-start overhead, CPU, memory, disk — needs measuring on a real device at all, automated or not. | Phase 1 (all) | ☐ not verified |
+| 6 | A forced crash captured by real KSCrash on iOS Simulator/device, appearing correctly after relaunch (feat-009's actual "Done when" criterion). | feat-009 | ☑ verified 2026-08-28 — `IOSCrashHarnessTests` (`Tests/APMKitTests/Crash/`), run via `xcodebuild test` against a booted iOS 18.0 Simulator; re-runnable any time per that file's header comment. |
 
 ## Shipped
 

@@ -40,4 +40,16 @@ struct BreadcrumbRingBufferTests {
         }
         #expect(buffer.snapshot().map(\.message) == ["crumb-2", "crumb-3", "crumb-4"])
     }
+
+    @Test("onAdd fires with the just-added breadcrumb (CrashReporter's mirroring hook)")
+    func onAddFiresWithNewBreadcrumb() {
+        let buffer = BreadcrumbRingBuffer(capacity: 100)
+        var received: [String] = []
+        buffer.onAdd = { received.append($0.message) }
+
+        buffer.add(Breadcrumb(category: .navigation, message: "first"))
+        buffer.add(Breadcrumb(category: .log, message: "second"))
+
+        #expect(received == ["first", "second"])
+    }
 }

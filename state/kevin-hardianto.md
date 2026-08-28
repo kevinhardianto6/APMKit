@@ -9,20 +9,20 @@
 
 - **Objective:** Build the APM Kit iOS SDK (Phase 1 network observability + Phase 2 crash
   reporting), per docs/00-02.
-- **Active feature:** none — Phase 1 (feat-001..008) complete and archived. Not yet started
-  feat-009.
+- **Active feature:** none — feat-009 (Crash Reporting / KSCrash) closed ✅. Phase 2 not yet
+  started on feat-010.
 - **Status:** —
-- **Last verify:** `./verify.sh build` → `HARNESS_VERIFY: PASS (build)`, 2026-08-28. 131 tests
-  at last full run (feat-008 close); no code changed since, only docs/records.
+- **Last verify:** `./verify.sh build` and `./verify.sh test` → both `HARNESS_VERIFY: PASS`,
+  2026-08-28. 149 tests. Plus a real-platform check outside that suite: `IOSCrashHarnessTests`
+  passed on a booted iOS 18.0 Simulator via `xcodebuild test` (not part of `swift test`).
 
 ## Next step
 
-Phase 1 wrap-up written: `archive/epics/phase-1-wrap-up.md` — full MOB-/SEC- coverage
-accounting, explicit-scope deferrals vs. real unflagged gaps (performance budget unmeasured,
-SEC-08/10/11/12/14 pinning-on-ingest-connection and at-rest encryption, MOB-23/24 CocoaPods/
-semver), and the running manual-device-verification list. Ready to start feat-009 (Crash
-Reporting / KSCrash) whenever asked — highest-risk feature per `CONSTITUTION.md` (only
-component allowed to run during an actual crash), expect it to span several PRs.
+feat-009 closed 2026-08-28 across 3 PRs — full detail rotated to `archive/features/feat-009.md`
+(install/pipeline; macOS-host verification that caught a real `reason`-field mapping bug;
+real iOS Simulator verification via a permanent `#if os(iOS)`-gated harness). feat-010
+(Stability + Remote Control) is next in the mandatory build order — depends on feat-005,
+feat-009, both done. Not started yet.
 
 ## Parked
 
@@ -40,9 +40,14 @@ component allowed to run during an actual crash), expect it to span several PRs.
 
 | File | Change | Why |
 |------|--------|-----|
-| `archive/features/feat-008.md` | Added | Rotated feat-008 detail on closing it |
-| `archive/sessions/2026-08-28-feat-008-phase1-wrapup.md` | Added | Rotated prior session's Changes table |
-| `archive/epics/phase-1-wrap-up.md` | Added | Full Phase 1 requirement accounting |
-| `FEATURES.md` | feat-008 → ✅ (archived); pointer to wrap-up added | Phase 1 complete |
+| `Sources/APMKit/Crash/CrashReporter.swift` | Added `installPath` override param to `install()` | Lets `IOSCrashHarnessTests` pin two separate Simulator process launches to the same on-disk KSCrash store |
+| `Sources/APMKit/APMKit.swift` | `installCrashReporting` gained matching `installPath` param (default `nil`, no behavior change for real callers) | Same |
+| `Tests/APMKitTests/Crash/IOSCrashHarnessTests.swift` | Added, `#if os(iOS)`-gated, kept permanently (user's call) | Real iOS Simulator crash verification — closes feat-009's actual "Done when" criterion; never runs on the macOS host so `verify.sh` is unaffected |
+| `FEATURES.md` | feat-009 → ✅, table row + epic progress (9/10) updated, detail rotated to archive, checklist item 6 marked verified | Feature closed |
+| `archive/features/feat-009.md` | Added — full PR 1/2/3 detail, decisions, review history | Rotation per `AGENTS.md` session-handoff rule |
+| `archive/epics/phase-1-wrap-up.md` | Manual-verification list replaced with a pointer to `FEATURES.md` | User asked for one consolidated checklist, not scattered copies |
+
+Verified live on this machine: Xcode 26.4, iOS 18.0 Simulator (iPhone 16 Pro). Exact
+reproduction commands are in `IOSCrashHarnessTests.swift`'s header comment.
 
 _Ground truth: run `git diff --stat` to confirm this table matches reality._

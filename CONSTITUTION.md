@@ -104,6 +104,17 @@ Converted: removed `APMKit.xcodeproj`/`APMKitTests` bundle, added `Package.swift
 `swift test` instead of `xcodebuild`. Reason: matches MOB-23 (distribution via SPM &
 CocoaPods) and avoids maintaining a parallel Xcode project that isn't the actual deliverable.
 
+### 2026-08-28 · feat-009: KSCrash monitor selection excludes Watchdog/hang
+
+`KSCrashMonitorTypeProductionSafeMinimal` (the sane default) includes `Watchdog`, which is
+KSCrash's built-in main-thread-hang detector — exactly what MOB-18 asks for. But MOB-18 is
+`FEATURES.md`'s feat-010 requirement, not feat-009's, and this project's build order is
+mandatory (Prohibitions — process, above): one feature active at a time, no drive-by scope
+creep into a later row. feat-009 installs `machException, signal, cppException, nsException,
+userReported, termination` and leaves `Watchdog` off; feat-010 turns it on. `CrashReportMapper`
+still decodes `crash_type: hang` defensively so that flip is the only change feat-010 needs to
+make here. Full reasoning: `FEATURES.md` → feat-009 → Decisions.
+
 ### 2026-08-24 · Deployment target iOS 15
 
 The harness's auto-probe picked up the *host* Xcode's default (`IPHONEOS_DEPLOYMENT_TARGET =

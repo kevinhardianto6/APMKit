@@ -19,6 +19,12 @@ public final class BreadcrumbRingBuffer {
     private var storage: [Breadcrumb] = []
     private let lock = NSLock()
 
+    /// Fires after every `add`, outside the lock. `CrashReporter.startBreadcrumbMirroring`
+    /// uses this to keep KSCrash's per-key user info in sync (MOB-13) — expected to be wired
+    /// once during SDK setup, before concurrent breadcrumb calls begin, same as `sink`/
+    /// `sessionManager` elsewhere in this SDK.
+    public var onAdd: ((Breadcrumb) -> Void)?
+
     public init(capacity: Int = 100) {
         self.capacity = capacity
     }
@@ -30,6 +36,7 @@ public final class BreadcrumbRingBuffer {
             storage.removeFirst(storage.count - capacity)
         }
         lock.unlock()
+        onAdd?(breadcrumb)
     }
 
     /// Oldest-first snapshot of everything currently retained.

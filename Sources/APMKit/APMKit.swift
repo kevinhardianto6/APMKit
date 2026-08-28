@@ -1,4 +1,5 @@
 import Foundation
+import KSCrashRecording
 
 /// Public entry point. Every method here is a boundary the host app calls across —
 /// `CONSTITUTION.md` rule #1 applies from the first line of every one of them.
@@ -72,5 +73,51 @@ public enum APM {
     /// there, along with everything else — this call itself does no PII handling.
     public static func breadcrumb(_ message: String, category: BreadcrumbCategory, level: BreadcrumbLevel = .info) {
         BreadcrumbRingBuffer.shared.add(Breadcrumb(category: category, message: message, level: level))
+    }
+
+    /// Installs crash monitoring (docs/02 §3.5, MOB-15/16/17) **and** drains whatever
+    /// KSCrash captured during the *previous* run through `sink`/`sessionManager` — same
+    /// explicit-dependency style as `logError`/`instrumentedSession`. Deliberately one call,
+    /// not two: a `processPendingCrashReports` the host has to remember to call separately is
+    /// the same failure shape as feat-005's anti-loop problem (MOB-09/10) — a safety property
+    /// that depends on the integrator remembering a second step isn't a guarantee. Draining is
+    /// the point of this feature (MOB-16: "sent on next launch"); folding it into the one call
+    /// every integration needs anyway (`install`) makes forgetting it structurally impossible.
+    ///
+    /// Call once, as early as possible during app launch. The KSCrash install itself is
+    /// synchronous (KSCrash's own rule: fast, no heavy work on the launch path); draining is
+    /// dispatched to a background queue so a launch-time call from the main thread never
+    /// becomes blocking I/O (docs/02 §5 perf budget). Note this is the same pre-existing
+    /// caveat `SessionManager` already documents for every other capture path (network capture
+    /// touches it from URLSession's delegate queue, manual `logError`/`breadcrumb` from
+    /// whatever thread the host calls them on) — this dispatch doesn't introduce a new
+    /// thread-safety requirement, it's subject to the same one every other feature already is.
+    ///
+    /// - Parameter installPath: see `CrashReporter.install(installPath:)` — production callers
+    ///   should never pass this; it exists for `IOSCrashHarnessTests`.
+    @discardableResult
+    public static func installCrashReporting(sink: EventSink, sessionManager: SessionManager, installPath: String? = nil) -> Bool {
+        let installed = CrashReporter.shared.install(installPath: installPath)
+        guard installed else { return false }
+        crashProcessingQueue.async {
+            processPendingCrashReports(sink: sink, sessionManager: sessionManager)
+        }
+        return true
+    }
+
+    private static let crashProcessingQueue = DispatchQueue(label: "kit.apm.crash-processing")
+
+    /// Reads every crash report KSCrash captured during a previous run, converts each to a
+    /// `crash` event (docs/01 §4.3) through `sink`/`sessionManager`, and clears it from
+    /// KSCrash's own raw store (`CrashReportProcessor`). Exposed separately for tests and for
+    /// callers who need explicit control over timing; `installCrashReporting` already calls
+    /// this for the normal path, so most integrations never need to call it directly.
+    public static func processPendingCrashReports(sink: EventSink, sessionManager: SessionManager) {
+        guard let store = KSCrash.shared.reportStore else { return }
+        CrashReportProcessor(
+            source: KSCrashReportSource(store: store),
+            sink: sink,
+            sessionManager: sessionManager
+        ).processPendingReports()
     }
 }

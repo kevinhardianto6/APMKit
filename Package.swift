@@ -14,9 +14,20 @@ let package = Package(
     products: [
         .library(name: "APMKit", targets: ["APMKit"])
     ],
+    dependencies: [
+        // feat-009: the only dependency Phase 2 is permitted to add (CONSTITUTION.md platform
+        // invariants) — wraps a mature crash library instead of hand-rolling signal/mach
+        // handlers (docs/02 §3.5).
+        .package(url: "https://github.com/kstenerud/KSCrash.git", from: "2.1.0")
+    ],
     targets: [
         .target(
             name: "APMKit",
+            dependencies: [
+                // Product name is "Recording" (unprefixed); the Swift module it vends is
+                // `KSCrashRecording` — see KSCrash's own module-naming convention.
+                .product(name: "Recording", package: "KSCrash")
+            ],
             path: "Sources/APMKit"
         ),
         .testTarget(

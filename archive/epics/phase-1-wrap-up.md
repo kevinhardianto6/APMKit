@@ -95,27 +95,9 @@ pilot-ready, not just before v1.
 
 ## Manual device/simulator verification list (running, for the pilot)
 
-Everything below compiles and its *logic* is unit-tested on the macOS host toolchain, but the
-real OS-level behavior cannot be exercised by `swift test` and needs an actual device or
-iOS Simulator run:
-
-1. **feat-008's iOS-gated integrity probes** — `isRooted()`'s real file/symlink/sandbox-write
-   checks, `isDevMode()`'s provisioning-profile/receipt lookup, and `isEmulator()`'s `true`
-   branch (only reachable when actually compiled for Simulator). Only the pure
-   `JailbreakVerdict`/`DevModeVerdict` combination logic is proven by `swift test`.
-2. **feat-007's OS-level automatic breadcrumb firing** — real `UIApplication` lifecycle
-   notifications and real `NWPathMonitor` connectivity transitions actually invoking
-   `AutomaticBreadcrumbSource`'s `recordLifecycle`/`recordConnectivity`. Only the mapping
-   logic those methods contain is proven by `swift test`.
-3. **SEC-07's `FileProtectionType`** (feat-002) — the protection level and backup-exclusion
-   flag have no observable effect on the macOS test host; needs a real-device/simulator file
-   attribute check.
-4. **docs/02 §7's explicit Fase 1 test scenarios** not yet covered by any automated test:
-   disk full (real `ENOSPC`, not just the SDK's own size cap), and force-quit specifically
-   *during* an in-flight upload (offline buffering itself is tested; the exact "killed
-   mid-HTTP-request" timing is not).
-5. **Performance budget** (see gap above) — needs to be measured on a real device at all,
-   automated or not.
+Moved to `FEATURES.md` → "Manual verification checklist (pilot)" (2026-08-28), so it stays one
+list across features instead of drifting between this archive file and later ones (feat-009
+added its own item there). This section intentionally left as a pointer, not a copy.
 
 ## Test suite size at close of Phase 1
 
