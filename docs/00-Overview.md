@@ -161,7 +161,7 @@ Aplikasi yang dimonitor tidak menangani kategori data sangat sensitif (finansial
 |---|---|---|---|
 | Bug SDK menyebabkan crash di app tim lain | Sangat tinggi — merusak kepercayaan, menghentikan adopsi | Entry point defensif, kill switch (MOB-21), rollout bertahap, canary di app sendiri | Mobile |
 | Nomor telepon bocor ke storage lewat jalur tak terduga (URL/error/breadcrumb **atau** `user_id`) | Tinggi — APM berubah jadi basis data PII tanpa disengaja | Scrubbing berlapis (SEC-03b, SEC-05) · `user_id` di-hash di ingestion (BE-21) · `server_key` server-side (SEC-28) · audit kebocoran (SEC-24) | Mobile + Backend |
-| Rotasi sertifikat mematikan telemetri seluruh app | Tinggi | Pin cadangan + kill switch pinning (SEC-11) | Mobile |
+| Rotasi sertifikat mematikan telemetri seluruh app | Tinggi | Dihindari secara desain: pinning **tidak aktif secara default** (SEC-11 → P2). Bila suatu app menyalakannya, wajib pin cadangan + kill switch | Mobile |
 | Symbol tidak terupload → crash report tak terbaca | Tinggi | CI gagal jika upload gagal, peringatan eksplisit di dashboard (FE-17) | Mobile + Backend |
 | Disk penuh di server on-premise → data hilang | Tinggi | Alert di 70% kapasitas (OPS-05), TTL retensi, sampling, runbook | Backend |
 | Endpoint ingestion terbuka ke internet jadi sasaran abuse | Sedang | WAF + rate limit di DMZ (OPS-04), kunci write-only, quota per install | Backend |

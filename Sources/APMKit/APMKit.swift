@@ -75,6 +75,14 @@ public enum APM {
         BreadcrumbRingBuffer.shared.add(Breadcrumb(category: category, message: message, level: level))
     }
 
+    /// Records the cold-start metric (docs/01 §4.6, MOB-19) — call once, from wherever the
+    /// host app considers "first frame drawn" (see `ColdStartTracker`'s doc comment for why
+    /// this is host-invoked rather than automatic, same reasoning as MOB-12's screen
+    /// tracking). Idempotent: a second call this process does nothing.
+    public static func recordFirstFrame(sink: EventSink, sessionManager: SessionManager) {
+        ColdStartTracker.shared.recordFirstFrame(sink: sink, sessionManager: sessionManager)
+    }
+
     /// Installs crash monitoring (docs/02 §3.5, MOB-15/16/17) **and** drains whatever
     /// KSCrash captured during the *previous* run through `sink`/`sessionManager` — same
     /// explicit-dependency style as `logError`/`instrumentedSession`. Deliberately one call,
@@ -119,5 +127,32 @@ public enum APM {
             sink: sink,
             sessionManager: sessionManager
         ).processPendingReports()
+    }
+
+    /// Starts main-thread hang detection (docs/02 §3.6, MOB-18). Requires
+    /// `installCrashReporting` to have been called first (it's what enables KSCrash's
+    /// `Watchdog` monitor) — if it hasn't, this silently does nothing, per
+    /// `CONSTITUTION.md` rule #1. See `HangDetector`'s doc comment for why this wraps
+    /// KSCrash's own hang monitor rather than a hand-rolled timer.
+    public static func startHangDetection(sink: EventSink, sessionManager: SessionManager) {
+        HangDetector.shared.start(sink: sink, sessionManager: sessionManager)
+    }
+
+    /// Fetches `GET /v1/config` (docs/01 §9, MOB-20) and applies the result to `configStore` —
+    /// which is what `KillSwitch` and `SyncEngine`'s `isEnabled` closure read from (MOB-21).
+    /// Call once at startup, after constructing `configStore`, which is itself already usable
+    /// synchronously before this call returns (seeded from cache/`.safeDefault` at its own
+    /// `init`) — this call only ever *improves* on that, never blocks anything on it.
+    ///
+    /// - Parameter session: must never be `APM.instrumentedSession()` — same MOB-09 anti-loop
+    ///   rule as `IngestClient`. The default constructs a bare session with no delegate.
+    public static func fetchRemoteConfig(
+        endpoint: IngestEndpoint,
+        configStore: RemoteConfigStore,
+        session: URLSession = URLSession(configuration: .default)
+    ) {
+        RemoteConfigFetcher(endpoint: endpoint, session: session).fetch { config in
+            configStore.apply(config)
+        }
     }
 }

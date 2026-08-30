@@ -47,6 +47,19 @@ import Foundation
 /// consistent with this being a manual/Simulator-only verification tool, not something that
 /// runs in CI or on a real device.
 ///
+/// `phase3_hangDetection` (feat-010, MOB-18) is different in shape from phase 1/2: a resolved
+/// hang doesn't crash the process, so it's a single self-contained test, no process split
+/// needed. Still run via `xcodebuild test` against a Simulator, not `swift test` — this is the
+/// real KSCrash `Watchdog` monitor plus a real blocked main thread, which `swift test` on the
+/// macOS host can't meaningfully exercise (no iOS app/run-loop host).
+///
+/// ```
+/// xcodebuild test \
+///   -scheme APMKit \
+///   -destination 'platform=iOS Simulator,id=<UDID>' \
+///   "-only-testing:APMKitTests/IOSCrashHarnessTests/phase3_hangDetection()"
+/// ```
+///
 /// See `FEATURES.md` → "Manual verification checklist (pilot)" for when this was last run.
 @Suite(
     "IOSCrashHarnessTests — manual, iOS Simulator only, not part of the default test run",
@@ -112,6 +125,50 @@ struct IOSCrashHarnessTests {
         #expect(breadcrumbsJSON.contains("OrderScreen"))
         #expect(breadcrumbsJSON.contains("[redacted]"))
         #expect(breadcrumbsJSON.contains("081234567890") == false)
+    }
+
+    @Test("phase 3 (MOB-18): a real >2s main-thread block is detected live and reported, without crashing or hanging the test process itself")
+    func phase3_hangDetection() async throws {
+        let queueDirectory = URL(fileURLWithPath: "/tmp/apmkit-ios-crash-harness/hang-queue")
+        try? FileManager.default.removeItem(at: queueDirectory)
+        let queue = try FileDiskQueue(directoryURL: queueDirectory)
+        let sink = Scrubber(downstream: DiskQueueEventSink(diskQueue: queue))
+        let sessionManager = SessionManager()
+
+        let installed = APM.installCrashReporting(sink: sink, sessionManager: sessionManager, installPath: "/tmp/apmkit-ios-crash-harness/hang-kscrash")
+        #expect(installed)
+        APM.startHangDetection(sink: sink, sessionManager: sessionManager)
+
+        // Block the REAL main thread/run loop for 2.5s — the same thing a hung UI does. This
+        // is exactly the risk the user flagged: hang detection must not itself add to main-
+        // thread work. It doesn't (KSCrash's watchdog thread does the timing, not the main
+        // thread), which this test proves by the fact it completes at all rather than hanging.
+        DispatchQueue.main.async {
+            Thread.sleep(forTimeInterval: 2.5)
+        }
+
+        var events: [Event] = []
+        let deadline = Date().addingTimeInterval(15)
+        while Date() < deadline {
+            events = try queue.peek(limit: 10)
+            if events.contains(where: { $0.type == "crash" }) { break }
+            try await Task.sleep(nanoseconds: 200_000_000)
+        }
+
+        let event = try #require(events.first { $0.type == "crash" })
+        func string(_ key: String) -> String? {
+            if case .string(let value)? = event.attrs[key] { return value }
+            return nil
+        }
+        func bool(_ key: String) -> Bool? {
+            if case .bool(let value)? = event.attrs[key] { return value }
+            return nil
+        }
+
+        #expect(string("crash_type") == "hang")
+        #expect(string("name") == "MainThreadHang")
+        #expect(bool("is_fatal") == false)
+        #expect(string("reason")?.contains("ms") == true)
     }
 }
 #endif

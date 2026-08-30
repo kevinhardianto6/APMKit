@@ -46,7 +46,11 @@ public final class CrashReporter {
     @discardableResult
     public func install(installPath: String? = nil) -> Bool {
         let configuration = KSCrashConfiguration()
-        configuration.monitors = [.machException, .signal, .cppException, .nsException, .userReported, .termination]
+        // .watchdog added in feat-010 (MOB-18) — deliberately excluded in feat-009 (see the
+        // dated CONSTITUTION.md decision) until hang detection was actually in scope. Powers
+        // both `HangDetector`'s live observation and, for genuinely fatal watchdog
+        // terminations (0x8badf00d), the existing next-launch pipeline via `CrashReportMapper`.
+        configuration.monitors = [.machException, .signal, .cppException, .nsException, .userReported, .termination, .watchdog]
         // SEC-09: memory introspection can pull arbitrary object/string contents near the
         // stack pointer or CPU registers into the raw report — a PII risk this SDK doesn't
         // take. This is already the framework default; set explicitly so the choice reads as

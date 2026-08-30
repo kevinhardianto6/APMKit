@@ -5,17 +5,22 @@ import Foundation
 /// it only knows about `Event`, not `EventSink`.
 ///
 /// Failures are swallowed rather than thrown (`CONSTITUTION.md` rule #1: SDK must never
-/// throw into the host app) — proper failure counting (events written vs dropped) is
-/// feat-010's self-health counters (MOB-27); until then, a disk write failure here is
-/// silent by design rather than a partial/incorrect implementation of that requirement.
+/// throw into the host app) — but counted, not silently vanished (MOB-27, feat-010).
 public final class DiskQueueEventSink: EventSink {
     private let diskQueue: DiskQueue
+    private let selfHealth: SelfHealthCounters
 
-    public init(diskQueue: DiskQueue) {
+    public init(diskQueue: DiskQueue, selfHealth: SelfHealthCounters = .shared) {
         self.diskQueue = diskQueue
+        self.selfHealth = selfHealth
     }
 
     public func receive(_ event: Event) {
-        try? diskQueue.enqueue(event)
+        do {
+            try diskQueue.enqueue(event)
+            selfHealth.recordWritten()
+        } catch {
+            selfHealth.recordDropped()
+        }
     }
 }

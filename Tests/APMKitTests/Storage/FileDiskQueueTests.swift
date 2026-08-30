@@ -84,9 +84,11 @@ struct FileDiskQueueTests {
     func evictsOldestWhenCountCapExceeded() throws {
         let dir = tempDirectory()
         defer { try? FileManager.default.removeItem(at: dir) }
+        let selfHealth = SelfHealthCounters()
         let queue = try FileDiskQueue(
             directoryURL: dir,
-            configuration: .init(maxBytes: .max, maxEventCount: 3)
+            configuration: .init(maxBytes: .max, maxEventCount: 3),
+            selfHealth: selfHealth
         )
 
         for i in 0..<5 { try queue.enqueue(Event(type: "e\(i)", seq: i)) }
@@ -94,6 +96,8 @@ struct FileDiskQueueTests {
         let remaining = try queue.peek(limit: 10)
         #expect(remaining.count == 3)
         #expect(remaining.map(\.type) == ["e2", "e3", "e4"])
+        // MOB-27: the 2 evicted events were never sent — must be counted as dropped.
+        #expect(selfHealth.snapshot().dropped == 2)
     }
 
     @Test("FIFO-evicts oldest events when the byte-size cap is exceeded")

@@ -23,6 +23,7 @@ public final class FileDiskQueue: DiskQueue {
     private let directoryURL: URL
     private let configuration: Configuration
     private let fileManager: FileManager
+    private let selfHealth: SelfHealthCounters
     private let encoder = JSONEncoder()
     private let decoder = JSONDecoder()
     private let accessQueue = DispatchQueue(label: "kit.apm.diskqueue")
@@ -30,14 +31,19 @@ public final class FileDiskQueue: DiskQueue {
 
     /// - Parameter directoryURL: a directory dedicated to this queue — nothing else should
     ///   write here, since eviction and recovery treat every `*.json` file as a queued event.
+    /// - Parameter selfHealth: eviction under the size/count cap (MOB-06) permanently drops an
+    ///   event that was never sent — counted here (MOB-27, feat-010) since this is the one
+    ///   place that decision happens.
     public init(
         directoryURL: URL,
         configuration: Configuration = Configuration(),
-        fileManager: FileManager = .default
+        fileManager: FileManager = .default,
+        selfHealth: SelfHealthCounters = .shared
     ) throws {
         self.directoryURL = directoryURL
         self.configuration = configuration
         self.fileManager = fileManager
+        self.selfHealth = selfHealth
         try fileManager.createDirectory(at: directoryURL, withIntermediateDirectories: true)
         Self.applyDataProtection(to: directoryURL, fileManager: fileManager) // SEC-07
         self.nextSequence = try Self.recoverNextSequence(in: directoryURL, fileManager: fileManager)
@@ -90,6 +96,7 @@ public final class FileDiskQueue: DiskQueue {
             totalSize -= (try? fileSize(oldest)) ?? 0
             try? fileManager.removeItem(at: oldest)
             files.removeFirst()
+            selfHealth.recordDropped()
         }
     }
 

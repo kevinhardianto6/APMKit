@@ -230,9 +230,26 @@ Aplikasi yang dimonitor mengalirkan nomor telepon dan data user lain. **Ancaman 
 
 | ID | Requirement | Prio |
 |---|---|---|
-| SEC-10 | TLS 1.2+ untuk seluruh komunikasi; cleartext dinonaktifkan di level platform | P0 |
-| SEC-11 | Certificate pinning pada endpoint ingestion, **dengan pin cadangan dan kill switch**. Tanpa keduanya, rotasi sertifikat akan mematikan telemetri di seluruh app terpasang. | P1 |
-| SEC-12 | Jika pinning SDK sendiri gagal: **fail closed** — data tetap di disk, tidak pernah fallback ke koneksi tanpa proteksi | P0 |
+| SEC-10 | TLS 1.2+ untuk seluruh komunikasi SDK ke endpoint ingestion; cleartext dinonaktifkan di level platform (ATS di iOS, network security config di Android) | P0 |
+| SEC-11 | Certificate pinning pada endpoint ingestion — **opsional, tidak aktif secara default** (lihat keputusan di bawah). Bila dinyalakan per-app, **wajib** menyertakan pin cadangan dan kill switch via remote config. | P2 |
+| SEC-12 | Jika validasi TLS gagal karena sebab apa pun: **fail closed** — data tetap di disk, tidak pernah fallback ke koneksi tanpa proteksi. Berlaku terlepas dari SEC-11 aktif atau tidak. | P0 |
+
+> ### Keputusan: pinning tidak diaktifkan secara default (SEC-11 → P2)
+>
+> **Konteks.** Ada dua koneksi berbeda yang sering tertukar:
+>
+> | Koneksi | Client-nya | Yang melakukan pinning |
+> |---|---|---|
+> | App host → API bisnis | App host | App host. SDK hanya **mengamati** hasilnya (`ssl_pinning_rejected`, MOB-03) |
+> | **SDK → endpoint ingestion APM** | **SDK** | SDK — inilah lingkup SEC-11 |
+>
+> **Alasan diturunkan.** Biaya operasionalnya tidak sebanding dengan ancaman yang ditutup. Rotasi sertifikat server ingestion (rutin, biasanya tahunan) akan menghentikan pengiriman telemetri di **seluruh app terpasang sekaligus**, dan pemulihannya menuntut rilis app baru plus menunggu user memperbarui — berminggu-minggu tanpa visibilitas. Ancaman yang ditutup pinning hanya berlaku bila penyerang sudah mampu menanam CA palsu di device user; pada titik itu perusahaan menghadapi masalah yang jauh lebih besar daripada penyadapan data telemetri.
+>
+> Nilai data yang ditransmisikan juga rendah secara relatif: `user_id` mentah (langsung di-hash di ingestion, BE-21), path yang sudah dinormalisasi, dan breadcrumb yang sudah di-scrub. Request/response body tidak pernah ditangkap sama sekali (SEC-04).
+>
+> **Catatan penting.** Proyek ini lahir dari insiden kegagalan pinning yang membuat tim kehilangan visibilitas. Membangun sistem monitoring yang bisa mematikan dirinya sendiri dengan mekanisme yang persis sama adalah risiko yang tidak masuk akal untuk diambil secara default.
+>
+> **Jalur naik.** Bila suatu tim adopter membutuhkan jaminan lebih kuat (atau muncul tuntutan compliance), pinning dapat dinyalakan sebagai **opsi konfigurasi per-app** — dengan syarat mutlak pin cadangan + kill switch. Itu menjadi keputusan sadar per aplikasi, bukan default yang diam-diam berisiko.
 | SEC-13 | Kunci app diperlakukan sebagai **identifier, bukan credential** — kunci yang tertanam di binary dapat diekstrak siapa pun. Konsekuensinya kunci bersifat write-only. | P0 |
 | SEC-14 | Kunci dapat dirotasi lewat remote config tanpa rilis app baru | P1 |
 

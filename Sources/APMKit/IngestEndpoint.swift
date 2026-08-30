@@ -18,4 +18,11 @@ public struct IngestEndpoint: Equatable {
         self.url = url
         self.appKey = appKey
     }
+
+    /// `GET /v1/config` (docs/01 §9) — a sibling of `url` (`.../v1/ingest`) under the same
+    /// host, so remote-config fetches automatically share MOB-10's anti-loop exclusion with
+    /// ingest uploads (`APM.instrumentedSession()` excludes by host, not by path).
+    public var configURL: URL {
+        url.deletingLastPathComponent().appendingPathComponent("config")
+    }
 }

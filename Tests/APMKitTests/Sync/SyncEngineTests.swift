@@ -49,13 +49,17 @@ struct SyncEngineTests {
 
     private func makeEngine(
         diskQueue: DiskQueue, uploader: IngestUploading, clock: TestClock,
-        configuration: SyncEngine.Configuration = .init(minBackoffSeconds: 1, maxBackoffSeconds: 100, pauseDurationSeconds: 60)
+        configuration: SyncEngine.Configuration = .init(minBackoffSeconds: 1, maxBackoffSeconds: 100, pauseDurationSeconds: 60),
+        selfHealth: SelfHealthCounters = SelfHealthCounters(),
+        isEnabled: @escaping () -> Bool = { true }
     ) -> SyncEngine {
         SyncEngine(
             diskQueue: diskQueue, uploader: uploader,
             envelopeFactory: EnvelopeFactory(sessionManager: SessionManager()),
             configuration: configuration,
-            clock: { clock.now }
+            clock: { clock.now },
+            selfHealth: selfHealth,
+            isEnabled: isEnabled
         )
     }
 
@@ -72,11 +76,13 @@ struct SyncEngineTests {
         try diskQueue.enqueue(Event(type: "network", seq: 1))
 
         let uploader = ScriptedUploader(outcomes: [.accepted])
-        let engine = makeEngine(diskQueue: diskQueue, uploader: uploader, clock: TestClock())
+        let selfHealth = SelfHealthCounters()
+        let engine = makeEngine(diskQueue: diskQueue, uploader: uploader, clock: TestClock(), selfHealth: selfHealth)
         await trigger(engine)
 
         #expect(try diskQueue.count() == 0)
         #expect(uploader.uploadedBatchSizes == [1])
+        #expect(selfHealth.snapshot().sent == 1) // MOB-27
     }
 
     @Test("400 rejected: batch is dropped from disk, never retried")
@@ -86,12 +92,28 @@ struct SyncEngineTests {
         try diskQueue.enqueue(Event(type: "network", seq: 1))
 
         let uploader = ScriptedUploader(outcomes: [.rejected])
-        let engine = makeEngine(diskQueue: diskQueue, uploader: uploader, clock: TestClock())
+        let selfHealth = SelfHealthCounters()
+        let engine = makeEngine(diskQueue: diskQueue, uploader: uploader, clock: TestClock(), selfHealth: selfHealth)
         await trigger(engine)
 
         #expect(try diskQueue.count() == 0)
         await trigger(engine) // nothing left to upload
         #expect(uploader.callCount == 1)
+        #expect(selfHealth.snapshot().dropped == 1) // MOB-27, docs/01 §7: "Catat sebagai metrik internal"
+    }
+
+    @Test("MOB-21 kill switch: disabled means a sync cycle never uploads, even with data queued and a trigger fired")
+    func killSwitchDisablesUpload() async throws {
+        let (diskQueue, dir) = try makeDiskQueue()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        try diskQueue.enqueue(Event(type: "network", seq: 1))
+
+        let uploader = ScriptedUploader(outcomes: [.accepted])
+        let engine = makeEngine(diskQueue: diskQueue, uploader: uploader, clock: TestClock(), isEnabled: { false })
+        await trigger(engine)
+
+        #expect(uploader.callCount == 0)
+        #expect(try diskQueue.count() == 1) // data stays queued, not lost — just not sent
     }
 
     @Test("401/403 unauthorized: data stays on disk, sending pauses for pauseDurationSeconds")

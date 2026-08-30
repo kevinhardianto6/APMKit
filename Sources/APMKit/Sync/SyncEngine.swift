@@ -46,6 +46,11 @@ public final class SyncEngine {
     private let envelopeFactory: EnvelopeFactory
     private let configuration: Configuration
     private let clock: () -> Date
+    private let selfHealth: SelfHealthCounters
+    /// MOB-21 kill switch (feat-010): checked at the top of every sync cycle. `nil`/default
+    /// means "always enabled" — existing callers that don't pass a remote-config-backed
+    /// closure see no behavior change.
+    private let isEnabled: () -> Bool
 
     private let workQueue = DispatchQueue(label: "kit.apm.syncengine")
     private var timer: DispatchSourceTimer?
@@ -58,13 +63,17 @@ public final class SyncEngine {
         uploader: IngestUploading,
         envelopeFactory: EnvelopeFactory,
         configuration: Configuration = Configuration(),
-        clock: @escaping () -> Date = Date.init
+        clock: @escaping () -> Date = Date.init,
+        selfHealth: SelfHealthCounters = .shared,
+        isEnabled: @escaping () -> Bool = { true }
     ) {
         self.diskQueue = diskQueue
         self.uploader = uploader
         self.envelopeFactory = envelopeFactory
         self.configuration = configuration
         self.clock = clock
+        self.selfHealth = selfHealth
+        self.isEnabled = isEnabled
         self.currentBackoff = configuration.minBackoffSeconds
     }
 
@@ -107,6 +116,7 @@ public final class SyncEngine {
 
     private func performSyncCycle() {
         guard !isSyncing else { return }
+        guard isEnabled() else { return } // MOB-21: kill switch — data stays queued, never uploaded
         if let pausedUntil, clock() < pausedUntil { return }
         isSyncing = true
         defer { isSyncing = false }
@@ -138,13 +148,16 @@ public final class SyncEngine {
         switch outcome {
         case .accepted:
             try? diskQueue.remove(eventIds: ids)
+            selfHealth.recordSent(ids.count)
             currentBackoff = configuration.minBackoffSeconds
             drainQueue(limit: limit) // more may remain — keep going within this cycle
 
         case .rejected:
             // docs/01 §7: drop the batch, never retry — a malformed/unrecognized payload
-            // will never succeed no matter how many times it's resent.
+            // will never succeed no matter how many times it's resent. The spec explicitly
+            // calls this out as a required internal metric ("Catat sebagai metrik internal").
             try? diskQueue.remove(eventIds: ids)
+            selfHealth.recordDropped(ids.count)
             currentBackoff = configuration.minBackoffSeconds
 
         case .unauthorized:
