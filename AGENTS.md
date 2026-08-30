@@ -38,6 +38,8 @@ Run before claiming any work done. All checks must pass.
 ```bash
 ./verify.sh build
 ./verify.sh test
+./verify.sh budget   # binary-size budget, docs/02 §5 (feat-012)
+./verify.sh all      # build + test + lint + budget
 ```
 
 `verify.sh` wraps `swift build` / `swift test` and prints a final `HARNESS_VERIFY: PASS` /
@@ -48,6 +50,14 @@ verify strategy may need to move to `xcodebuild test -scheme APMKit -destination
 Simulator,name=<device>'` at that point rather than plain `swift build`/`swift test`. Do not
 silently paper over a host-only compile failure with `#if os(iOS)` unless the spec calls for
 platform-conditional behavior.
+
+`./verify.sh budget` (feat-012) measures the SDK's real linked-binary size delta via
+`scripts/size-budget/` — a separate throwaway two-executable SPM package (not the SDK's own
+`Package.swift`, which stays app-target-free) — against the docs/02 §5 threshold. CI
+(`.github/workflows/ci.yml`) runs `./verify.sh all` on every PR. Not everything in docs/02 §5
+is CI-checkable: CPU/memory/cold-start need real-device profiling under realistic load, not
+something a CI runner can measure honestly — those stay on the manual verification checklist
+in `FEATURES.md`, not synthesized here. See `archive/features/feat-012.md` for the reasoning.
 
 Only checks this project actually has are listed. Do not invent lint/e2e steps.
 

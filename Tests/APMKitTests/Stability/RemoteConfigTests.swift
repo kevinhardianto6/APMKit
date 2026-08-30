@@ -163,4 +163,38 @@ struct RemoteConfigFetcherTests {
         let fetcher = RemoteConfigFetcher(endpoint: .init(url: URL(string: "http://example.com/v1/ingest")!, appKey: "key"))
         #expect(fetcher.session.delegate == nil)
     }
+
+    @Test("SEC-10: the default session floors TLS at 1.2, not left to the host app's ATS config")
+    func defaultSessionEnforcesTLS12Floor() {
+        let fetcher = RemoteConfigFetcher(endpoint: .init(url: URL(string: "https://example.com/v1/ingest")!, appKey: "key"))
+        #expect(fetcher.session.configuration.tlsMinimumSupportedProtocolVersion == .TLSv12)
+    }
+
+    @Test("SEC-12: a real TLS-layer failure (HTTPS against a server that only speaks plain HTTP) fails closed — nil, never a fallback to an unprotected read of the response")
+    func realTLSLayerFailureFailsClosed() async throws {
+        // Same technique as IngestClientTests: the mock server only speaks plain HTTP, so
+        // asking it for HTTPS makes the TLS handshake itself genuinely fail — a real TLS-layer
+        // error, not a mocked trust-evaluation result.
+        let server = MockHTTPServer { _ in
+            .respond(status: 200, headers: ["Content-Type": "application/json"], body: """
+            {"enabled": true, "sampling": {"network": 1.0, "breadcrumb": 1.0}, "max_batch": 200, "upload_interval_s": 30, "disabled_features": []}
+            """.data(using: .utf8)!)
+        }
+        try server.start()
+        defer { server.stop() }
+
+        let configuration = URLSessionConfiguration.default
+        configuration.timeoutIntervalForRequest = 1.0
+        let fetcher = RemoteConfigFetcher(
+            endpoint: .init(url: URL(string: "https://127.0.0.1:\(server.port)/v1/ingest")!, appKey: "key"),
+            session: URLSession(configuration: configuration)
+        )
+
+        let config = await fetch(fetcher)
+
+        // A non-nil config would mean the handshake somehow succeeded or the SDK fell back to
+        // an unprotected read of the server's plain-HTTP response — exactly what SEC-12
+        // forbids. `nil` means `RemoteConfigStore` falls back to its cache/`.safeDefault`.
+        #expect(config == nil)
+    }
 }

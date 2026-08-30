@@ -5,6 +5,12 @@ import Foundation
 /// on an instrumented session would generate a `network` event for every upload, which would
 /// itself need uploading). The default `init` constructs a bare session with no custom
 /// delegate at all, so there is structurally no path back into `NetworkCaptureDelegate`.
+///
+/// **SEC-10:** the default session's configuration (`SDKOwnedSessionConfiguration`) floors
+/// TLS at 1.2, independent of the host app's own ATS settings. **SEC-12:** there is no code
+/// path anywhere in this type, `outcome(response:error:)`, or `SyncEngine`'s handling of its
+/// result that retries a failed request over a weaker connection — every failure keeps the
+/// batch on disk and retries the identical request against the identical session/URL.
 public final class IngestClient: IngestUploading {
     private let endpoint: IngestEndpoint
     /// Internal, not private: `MOB-09`'s anti-loop guarantee ("uploader MUST use a separate,
@@ -13,7 +19,7 @@ public final class IngestClient: IngestUploading {
     let session: URLSession
     private let encoder = JSONEncoder()
 
-    public init(endpoint: IngestEndpoint, session: URLSession = URLSession(configuration: .default)) {
+    public init(endpoint: IngestEndpoint, session: URLSession = URLSession(configuration: SDKOwnedSessionConfiguration.make())) {
         self.endpoint = endpoint
         self.session = session
     }

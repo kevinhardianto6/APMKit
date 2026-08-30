@@ -1,0 +1,20 @@
+name: CI
+
+# feat-012 (docs/02 §5): "Diukur otomatis di CI, bukan diperiksa manual... Dilanggar = tidak
+# boleh rilis." Deliberately minimal — one job, running the same `verify.sh all` a
+# contributor runs locally, so there's exactly one place the checks are defined. Not a release
+# pipeline: no distribution, no signing, no publishing steps here.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  verify:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run verify.sh (build, test, main-thread-I/O structural check, performance budget)
+        run: ./verify.sh all

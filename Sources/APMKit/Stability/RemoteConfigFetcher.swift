@@ -4,12 +4,16 @@ import Foundation
 /// `IngestClient` (feat-005, MOB-09): the caller-provided `URLSession` must never be
 /// `APM.instrumentedSession()`, and the default `init` constructs a bare session with no
 /// custom delegate — this is the SDK's own traffic, not something to capture.
+///
+/// **SEC-10/12** (feat-011): same TLS floor (`SDKOwnedSessionConfiguration`) and same
+/// fail-closed shape as `IngestClient` — any failure (network error, non-200, malformed body,
+/// or a TLS-layer failure) yields `nil`, never a partial/unprotected read of the response.
 public final class RemoteConfigFetcher {
     private let endpoint: IngestEndpoint
     let session: URLSession
     private let decoder = JSONDecoder()
 
-    public init(endpoint: IngestEndpoint, session: URLSession = URLSession(configuration: .default)) {
+    public init(endpoint: IngestEndpoint, session: URLSession = URLSession(configuration: SDKOwnedSessionConfiguration.make())) {
         self.endpoint = endpoint
         self.session = session
     }

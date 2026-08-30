@@ -108,4 +108,36 @@ struct IngestClientTests {
         let outcome = await upload(makeEnvelope(), with: client)
         #expect(outcome == .transportFailure)
     }
+
+    @Test("SEC-10: the default session floors TLS at 1.2, not left to the host app's ATS config")
+    func defaultSessionEnforcesTLS12Floor() {
+        let client = IngestClient(endpoint: .init(url: URL(string: "https://example.com/v1/ingest")!, appKey: "key"))
+        #expect(client.session.configuration.tlsMinimumSupportedProtocolVersion == .TLSv12)
+    }
+
+    @Test("SEC-12: a real TLS-layer failure (HTTPS against a server that only speaks plain HTTP) fails closed — transportFailure, never a fallback to an unprotected connection")
+    func realTLSLayerFailureFailsClosed() async throws {
+        // The mock server only ever speaks plain HTTP/1.1 — asking it for HTTPS makes the TLS
+        // handshake itself genuinely fail (the server never sends a ServerHello), a real
+        // TLS-layer error from URLSession, not a mocked trust-evaluation result. This is the
+        // same real-vs-simulated bar as feat-009/010's crash/hang verification, achieved here
+        // without needing to stand up an actual bad-certificate TLS server.
+        let server = MockHTTPServer { _ in .respond(status: 202) }
+        try server.start()
+        defer { server.stop() }
+
+        let configuration = URLSessionConfiguration.default
+        configuration.timeoutIntervalForRequest = 1.0
+        let client = IngestClient(
+            endpoint: .init(url: URL(string: "https://127.0.0.1:\(server.port)/v1/ingest")!, appKey: "key"),
+            session: URLSession(configuration: configuration)
+        )
+
+        let outcome = await upload(makeEnvelope(), with: client)
+
+        // `.accepted` would mean the handshake somehow succeeded or the SDK fell back to an
+        // unprotected read of the server's plain-HTTP response — both are exactly what SEC-12
+        // forbids. Every other UploadOutcome case keeps the batch on disk.
+        #expect(outcome != .accepted)
+    }
 }
