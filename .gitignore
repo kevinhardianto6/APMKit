@@ -1,5 +1,10 @@
 .build/
 .swiftpm/
+# The SDK itself is a Swift Package, never an Xcode project (CONSTITUTION.md, 2026-08-24
+# decision) — this rule keeps a stray `xcodebuild`/Xcode-generated project out of the SDK
+# root. feat-016's VerificationApp/ is a real, legitimately-checked-in app target and needs
+# its .xcodeproj committed, hence the exception below.
 *.xcodeproj
+!VerificationApp/VerificationApp.xcodeproj
 .DS_Store
 /tmp

@@ -7,38 +7,34 @@
 
 ## Now
 
-- **Objective:** Pre-Pilot Hardening epic (4/6) — remediating P0/P1/P2 gaps the shipped APM
-  Kit iOS SDK epic left unfiled, before the Android port starts.
-- **Active feature:** none — feat-015 (Optional Certificate Pinning, SEC-11) closed ✅. feat-016
-  (Composition Root) is next per the epic's fixed order, not started.
+- **Objective:** Pre-Pilot Hardening epic — **shipped 2026-08-31, 6/6 features.** No epic
+  currently in progress.
+- **Active feature:** none.
 - **Status:** —
-- **Last verify:** `./verify.sh build`/`test`/`budget` → all PASS, 2026-08-31. 214 tests.
+- **Last verify:** `./verify.sh build`/`test`/`budget` → all PASS, 2026-08-31. 225 tests.
 
 ## Next step
 
-feat-015 closed — full detail, including two real bugs found in this session's own new test
-infra (a `TLSMockServer` request-race and a keychain-contention flake introduced into
-feat-014's pre-existing `DiskQueueKeyStoreTests`, both fixed) and the full-cert-vs-SPKI pinning
-decision, is in `archive/features/feat-015.md`. Built from scratch: real TLS test
-infrastructure (`Tests/APMKitTests/Support/TLSMockServer.swift`) — nothing in this repo could
-drive a genuine TLS handshake before this feature; feat-011 had explicitly worked around that
-gap and flagged it as a known limitation for whenever pinning needed real cert content.
+Epic closed — full detail `archive/epics/pre-pilot-hardening.md`, this session's own account
+`archive/sessions/2026-08-31-feat-015-016-epic-shipped.md`. **Nothing is currently scoped as a
+ready (🟡) feature in `FEATURES.md`.**
 
-Next up: **feat-016 (Composition Root, `APM.start`)**, per the fixed order — depends on feat-014
-and feat-015, both now ✅, so it's ready. Per `CONSTITUTION.md`'s build order, this is a stop-
-for-review point: do not start feat-016 in the same sitting as feat-015 without the user's go-
-ahead. feat-016's scope already includes the internal verification app spike (see its
-`FEATURES.md` entry) — start there per its own "spike before building on it" instruction.
+The next real decision (per `AGENTS.md`'s own sequencing, `CONSTITUTION.md`, and this epic's
+own note): **Android port** is now unblocked but not yet scoped into `FEATURES.md` — parity
+notes are ready at `archive/epics/phase-1-2-wrap-up.md` → "What an Android port would need for
+parity," but scoping it into epics/features is a decision to make *with* the user next session,
+not something to assume and start solo.
 
-Session history through feat-013 is in
-`archive/sessions/2026-08-30-feat-012-013-and-composition-root-decision.md`. The 5 unverified
-Phase 1 manual-checklist items (plus 8, 9) stay open. Android port starts only after this
-epic closes.
+Also still open, not part of any active epic: manual verification checklist items 1–4 and 8 in
+`FEATURES.md` (Phase 1 device/Simulator checks that were never revisited), and item 5's
+real-device cold-start profiling (feat-016 got Simulator numbers, not the real thing).
+
+**feat-016's changes are staged but not committed** — commit is a separate step per
+`CONSTITUTION.md`'s "never auto-commit."
 
 ## Parked
 
-- **Android port** — sequenced *after* this epic. Parity notes:
-  `archive/epics/phase-1-2-wrap-up.md` → "What an Android port would need for parity."
+- **Android port** — unblocked as of this epic's close, not yet scoped. See above.
 
 ## In flight elsewhere
 
@@ -48,28 +44,9 @@ epic closes.
 
 - None.
 
-## Changes (this session, since feat-014's commit)
+## Changes (this session)
 
-| File | Change | Why |
-|------|--------|-----|
-| `FEATURES.md` | feat-016 entry expanded: internal verification app added to its scope; feat-015 marked ✅, detail rotated to archive; epic progress 4/6 → 5/6 | User-directed re-scope, then feat-015 close |
-| `Sources/APMKit/Sync/CertificatePinningConfiguration.swift` | new: pin type + `CertificatePinning` bundle | feat-015 |
-| `Sources/APMKit/Sync/CertificatePinningValidator.swift` | new: pure pin-match logic | feat-015 |
-| `Sources/APMKit/Sync/PinningSessionDelegate.swift` | new: `URLSessionDelegate`, kill-switch aware | feat-015 |
-| `Sources/APMKit/Sync/IngestClient.swift` | optional `pinning:` param, session-build branch | feat-015 |
-| `Sources/APMKit/Stability/RemoteConfigFetcher.swift` | same `pinning:` param as `IngestClient` | feat-015 |
-| `Tests/APMKitTests/Support/TLSMockServer.swift` | new: real self-signed-cert TLS test server (no prior TLS test infra existed) | feat-015 |
-| `Tests/APMKitTests/Support/TLSMockServerTests.swift` | new: sanity tests for the fixture itself | feat-015 |
-| `Tests/APMKitTests/Support/KeychainTestLock.swift` | new: shared keychain-serialization lock | feat-015 (fixes a flake this session's own test infra introduced) |
-| `Tests/APMKitTests/Storage/DiskQueueKeyStoreTests.swift` | wrapped keychain calls in `KeychainTestLock` | feat-015 flake fix, no assertion changes |
-| `Tests/APMKitTests/Sync/CertificatePinningConfigurationTests.swift` | new | feat-015 |
-| `Tests/APMKitTests/Sync/CertificatePinningValidatorTests.swift` | new | feat-015 |
-| `Tests/APMKitTests/Sync/CertificatePinningTests.swift` | new: the "Done when" tests | feat-015 |
-| `archive/features/feat-015.md` | new: full feature detail, rotated per closure | feat-015 close |
-
-Prior changes this session (feat-014 itself) are committed — see commit `3939eaa` and
-`archive/features/feat-014.md` for that detail, not repeated here. **feat-015's changes above
-are not yet committed** — its own commit is a separate step (`git commit`, not done by this
-agent per `CONSTITUTION.md`'s "never auto-commit").
+See `archive/sessions/2026-08-31-feat-015-016-epic-shipped.md` for the full table (feat-015,
+feat-016, epic rotation). Not repeated here per the hot-file size rule.
 
 _Ground truth: run `git diff --stat` to confirm this table matches reality._

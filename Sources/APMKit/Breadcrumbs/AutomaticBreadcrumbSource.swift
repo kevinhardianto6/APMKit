@@ -22,6 +22,20 @@ public final class AutomaticBreadcrumbSource {
     private var pathMonitor: NWPathMonitor?
     private let monitorQueue = DispatchQueue(label: "kit.apm.breadcrumbs.connectivity")
 
+    /// feat-016: the composition root's only lever for wiring `SessionManager`/`SyncEngine`
+    /// to these same real notifications, without a second, duplicate set of UIApplication
+    /// observers and `NWPathMonitor` instance competing with this type's own. `nil` by
+    /// default — existing callers (feat-007's own tests, any host using this type standalone
+    /// for breadcrumbs only) see no behavior change.
+    public var onDidEnterBackground: (() -> Void)?
+    public var onWillEnterForeground: (() -> Void)?
+    /// Fired every time the path monitor reports a satisfied path — including the very first
+    /// callback at startup, not only on a satisfied→unsatisfied→satisfied transition.
+    /// `SyncEngine.connectivityRestored()` (MOB-08) is safe and cheap to call when nothing was
+    /// actually lost: it just triggers a sync cycle, which is a no-op if the queue is empty or
+    /// already draining.
+    public var onConnectivityRestored: (() -> Void)?
+
     public init(breadcrumbs: BreadcrumbRingBuffer = .shared) {
         self.breadcrumbs = breadcrumbs
     }
@@ -67,6 +81,11 @@ public final class AutomaticBreadcrumbSource {
     /// host-vs-iOS verification note).
     func recordLifecycle(_ message: String) {
         breadcrumbs.add(Breadcrumb(category: .lifecycle, message: message))
+        switch message {
+        case "app_did_enter_background": onDidEnterBackground?()
+        case "app_will_enter_foreground": onWillEnterForeground?()
+        default: break
+        }
     }
 
     private func startConnectivityObserver() {
@@ -83,5 +102,6 @@ public final class AutomaticBreadcrumbSource {
     /// force a real network state change deterministically.
     func recordConnectivity(satisfied: Bool) {
         breadcrumbs.add(Breadcrumb(category: .network, message: satisfied ? "connectivity_restored" : "connectivity_lost"))
+        if satisfied { onConnectivityRestored?() }
     }
 }

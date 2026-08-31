@@ -39,6 +39,43 @@ struct AutomaticBreadcrumbSourceTests {
         #expect(snapshot[1].message == "connectivity_lost")
     }
 
+    @Test("feat-016: recordLifecycle fires onDidEnterBackground/onWillEnterForeground for exactly the matching message, never both")
+    func recordLifecycleFiresMatchingHookOnly() {
+        let source = AutomaticBreadcrumbSource(breadcrumbs: BreadcrumbRingBuffer(capacity: 10))
+        var backgroundCount = 0
+        var foregroundCount = 0
+        source.onDidEnterBackground = { backgroundCount += 1 }
+        source.onWillEnterForeground = { foregroundCount += 1 }
+
+        source.recordLifecycle("app_did_enter_background")
+        #expect(backgroundCount == 1)
+        #expect(foregroundCount == 0)
+
+        source.recordLifecycle("app_will_enter_foreground")
+        #expect(backgroundCount == 1)
+        #expect(foregroundCount == 1)
+
+        source.recordLifecycle("app_did_become_active") // unrelated message — neither hook fires
+        #expect(backgroundCount == 1)
+        #expect(foregroundCount == 1)
+    }
+
+    @Test("feat-016: recordConnectivity fires onConnectivityRestored only when satisfied, including on the very first callback")
+    func recordConnectivityFiresRestoredHookOnlyWhenSatisfied() {
+        let source = AutomaticBreadcrumbSource(breadcrumbs: BreadcrumbRingBuffer(capacity: 10))
+        var restoredCount = 0
+        source.onConnectivityRestored = { restoredCount += 1 }
+
+        source.recordConnectivity(satisfied: true)
+        #expect(restoredCount == 1)
+
+        source.recordConnectivity(satisfied: false)
+        #expect(restoredCount == 1)
+
+        source.recordConnectivity(satisfied: true)
+        #expect(restoredCount == 2)
+    }
+
     @Test("start() then stop() does not crash and leaves no dangling observers")
     func startAndStopDoNotCrash() {
         let source = AutomaticBreadcrumbSource(breadcrumbs: BreadcrumbRingBuffer(capacity: 100))

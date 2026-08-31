@@ -148,14 +148,18 @@ public enum APM {
     /// synchronously before this call returns (seeded from cache/`.safeDefault` at its own
     /// `init`) — this call only ever *improves* on that, never blocks anything on it.
     ///
+    /// - Parameter pinning: SEC-11 (feat-015) — `nil` (default) fetches exactly as before this
+    ///   parameter existed. An explicit `session` (as tests that supply their own already do)
+    ///   still takes priority over `pinning`, same rule as `IngestClient`/`RemoteConfigFetcher`.
     /// - Parameter session: must never be `APM.instrumentedSession()` — same MOB-09 anti-loop
     ///   rule as `IngestClient`. The default constructs a bare session with no delegate.
     public static func fetchRemoteConfig(
         endpoint: IngestEndpoint,
         configStore: RemoteConfigStore,
-        session: URLSession = URLSession(configuration: .default)
+        pinning: CertificatePinning? = nil,
+        session: URLSession? = nil
     ) {
-        RemoteConfigFetcher(endpoint: endpoint, session: session).fetch { config in
+        RemoteConfigFetcher(endpoint: endpoint, pinning: pinning, session: session).fetch { config in
             configStore.apply(config)
         }
     }

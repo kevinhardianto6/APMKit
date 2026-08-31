@@ -1,0 +1,262 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		999382750B4E4EC49888577B /* VerificationAppApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4DDD47A8C1947E2BF858CD4 /* VerificationAppApp.swift */; };
+		A867B18BE54847A4999AC600 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 41E6038565934471889A2921 /* ContentView.swift */; };
+		14A9A306BDB14E32A15D842D /* APMKit in Frameworks */ = {isa = PBXBuildFile; productRef = D2E0B5E1FC7C44F0B325B758 /* APMKit */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		9196D94BC38A4DC29857F422 /* VerificationApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = VerificationApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		F4DDD47A8C1947E2BF858CD4 /* VerificationAppApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VerificationAppApp.swift; sourceTree = "<group>"; };
+		41E6038565934471889A2921 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		0B88BE9E9E204EBDA0C83C9E /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		6AFAA29BC06143F08E9CCC6B /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				14A9A306BDB14E32A15D842D /* APMKit in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		32669E01F6E74BBE91E16D96 = {
+			isa = PBXGroup;
+			children = (
+				13CD8EFEB7554717A7F55F0E /* VerificationApp */,
+				D982AADED2B84F44A6EB09A6 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		D982AADED2B84F44A6EB09A6 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				9196D94BC38A4DC29857F422 /* VerificationApp.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		13CD8EFEB7554717A7F55F0E /* VerificationApp */ = {
+			isa = PBXGroup;
+			children = (
+				F4DDD47A8C1947E2BF858CD4 /* VerificationAppApp.swift */,
+				41E6038565934471889A2921 /* ContentView.swift */,
+				0B88BE9E9E204EBDA0C83C9E /* Info.plist */,
+			);
+			path = VerificationApp;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		AA274D3407DF4BE1A7D5812A /* VerificationApp */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 17B73831BDD645AD85C1EE61 /* Build configuration list for PBXNativeTarget "VerificationApp" */;
+			buildPhases = (
+				DFB642084E8D4201AA1F30A6 /* Sources */,
+				6AFAA29BC06143F08E9CCC6B /* Frameworks */,
+				E2FA58C4615640348016DA2A /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = VerificationApp;
+			packageProductDependencies = (
+				D2E0B5E1FC7C44F0B325B758 /* APMKit */,
+			);
+			productName = VerificationApp;
+			productReference = 9196D94BC38A4DC29857F422 /* VerificationApp.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		171E20F37DFF4FDBAEC47210 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 1600;
+				LastUpgradeCheck = 1600;
+			};
+			buildConfigurationList = 59D7FF5F953A4455BE2B065A /* Build configuration list for PBXProject "VerificationApp" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = 32669E01F6E74BBE91E16D96;
+			packageReferences = (
+				288DCDA7AD70484C93420ECC /* XCLocalSwiftPackageReference "../" */,
+			);
+			productRefGroup = D982AADED2B84F44A6EB09A6 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				AA274D3407DF4BE1A7D5812A /* VerificationApp */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		E2FA58C4615640348016DA2A /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		DFB642084E8D4201AA1F30A6 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				999382750B4E4EC49888577B /* VerificationAppApp.swift in Sources */,
+				A867B18BE54847A4999AC600 /* ContentView.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		7D741C8588ED4A1688E22458 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CODE_SIGN_STYLE = Automatic;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_TESTABILITY = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		A193EC31C4534AE191B2EFE4 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CODE_SIGN_STYLE = Automatic;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				GCC_OPTIMIZATION_LEVEL = s;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		C12BB27128CF47FBB1019B98 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = "";
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Manual;
+				CODE_SIGNING_ALLOWED = YES;
+				CODE_SIGNING_REQUIRED = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = VerificationApp/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "kit.apm.verificationapp";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		DDF27B6F972D44E99055AC05 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = "";
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Manual;
+				CODE_SIGNING_ALLOWED = YES;
+				CODE_SIGNING_REQUIRED = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = VerificationApp/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "kit.apm.verificationapp";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		59D7FF5F953A4455BE2B065A /* Build configuration list for PBXProject "VerificationApp" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				7D741C8588ED4A1688E22458 /* Debug */,
+				A193EC31C4534AE191B2EFE4 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		17B73831BDD645AD85C1EE61 /* Build configuration list for PBXNativeTarget "VerificationApp" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				C12BB27128CF47FBB1019B98 /* Debug */,
+				DDF27B6F972D44E99055AC05 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		288DCDA7AD70484C93420ECC /* XCLocalSwiftPackageReference "../" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = "..";
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		D2E0B5E1FC7C44F0B325B758 /* APMKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = APMKit;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = 171E20F37DFF4FDBAEC47210 /* Project object */;
+}
