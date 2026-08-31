@@ -2,9 +2,9 @@ Pod::Spec.new do |s|
   s.name         = "APMKit"
   s.version      = "1.0.0"
   s.summary      = "In-house iOS Application Performance Monitoring SDK — crash reporting and network observability."
-  s.homepage     = "https://github.com/REPLACE_ORG/APMKit"
+  s.homepage     = "https://github.com/kevinhardianto6/APMKit"
   s.license      = { :type => "Proprietary", :text => "Internal use only — not for public distribution." }
-  s.author       = { "Mobile Platform Team" => "mobile-platform@REPLACE_ORG.example" }
+  s.author       = { "Mobile Platform Team" => "hardiantokevin00@gmail.com" }
 
   # docs/02-Mobile-SDK.md: iOS 15+. This podspec has no s.osx line — unlike Package.swift,
   # which also declares .macOS(.v11) *only* so `swift build`/`swift test` see iOS-15-era API
@@ -14,7 +14,7 @@ Pod::Spec.new do |s|
   s.ios.deployment_target = "15.0"
   s.swift_versions = ["5.9"]
 
-  s.source       = { :git => "https://github.com/REPLACE_ORG/APMKit.git", :tag => s.version.to_s }
+  s.source       = { :git => "https://github.com/kevinhardianto6/APMKit.git", :tag => s.version.to_s }
   s.source_files = "Sources/APMKit/**/*.swift"
 
   # Mirrors Package.swift's `.package(url: ".../KSCrash.git", from: "2.1.0")` dependency on

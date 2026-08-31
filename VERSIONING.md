@@ -68,12 +68,11 @@ silently shipping a CocoaPods release whose `X-APM-Sdk` header reports the wrong
   its CocoaPods module layout, `./verify.sh podspec` re-proves this rather than assuming it
   still holds.
 
-- **`homepage`/`source` URLs in `APMKit.podspec` are placeholders** (`REPLACE_ORG`) — this
-  repo has no established GitHub org/remote yet. `pod lib lint` passes regardless (it only
-  warns that the URL is unreachable, doesn't fail on it), but these **must** be filled in with
-  the real repository URL before an actual CocoaPods release — `pod spec lint` used at publish
-  time (as opposed to `pod lib lint` used here for pre-release validation) does require a
-  reachable, tagged source.
+- **`homepage`/`source` URLs in `APMKit.podspec`** point to the real repository
+  (`github.com/kevinhardianto6/APMKit`, added 2026-08-31) — no longer the `REPLACE_ORG`
+  placeholder `pod lib lint` tolerated during pre-release validation. `pod spec lint` at
+  publish time (unlike `pod lib lint` used here) requires a reachable, tagged source, so this
+  had to be resolved before an actual CocoaPods release regardless.
 
 ## Integration friction — flagged for MOB-25 ("integration in under 30 minutes")
 
