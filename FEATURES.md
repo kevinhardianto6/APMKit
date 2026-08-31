@@ -82,6 +82,14 @@ Prohibitions — process): one feature active at a time, stop for review after e
 > the manual checklist (item 9) rather than claimed proven. Also fixed two **pre-existing**
 > iOS-15-floor violations (`Data.contains`, Swift `Regex`) that only a real Simulator build —
 > not `swift test` on macOS — could have caught; one was in already-committed feat-013 work.
+>
+> **2026-08-31, feat-016 scope decision:** the three findings above (feat-012 cold-start,
+> feat-013 composition-root friction, feat-014 Keychain persistence) all trace to the same
+> root cause — no app in this repo to integrate into or test against. Rather than re-derive
+> that three times, feat-016 now explicitly includes building a **minimal internal
+> verification app** (not MOB-25's own published/maintained sample app — see feat-016's entry
+> for the distinction) as part of its own scope, since its "Done when" already needed one.
+> Spike the `.xcodeproj` cost early and report back before building further on it.
 
 | ID | Feature | Status | By | Depends on | Requirements | Evidence |
 |----|---------|:------:|----|------------|--------------|----------|
@@ -140,6 +148,35 @@ Prohibitions — process): one feature active at a time, stop for review after e
 - **Done when:** a from-scratch integration in a fresh project, timed, completes in under 30
   minutes following only the written docs — MOB-25's actual target, measured directly rather
   than assumed satisfied because a composition root exists. Not satisfied by unit tests alone.
+
+> **2026-08-31, added after feat-014:** feat-016's own "Done when" (a timed integration) is
+> unmeasurable without something to integrate *into* — so this feature includes building a
+> **minimal app**, not just the `APM.start` API. Decided explicitly, not assumed:
+> - **This is internal verification tooling, not MOB-25's deliverable.** Minimal, blank
+>   single-screen, lives outside the SDK's own `Package.swift` (`AGENTS.md`'s "no app target"
+>   stays true for the SDK) — same precedent as `scripts/size-budget/` and the feat-013
+>   bare-clone consumer. MOB-25 ("Sample app + dokumen integrasi," docs/02 §3.7) is a
+>   *published, maintained* reference other teams copy from, paired with a full integration
+>   guide document — a documentation/DX deliverable, materially bigger than this. **feat-016
+>   does not close MOB-25** — it gives Phase 3 something to evolve instead of starting from
+>   zero, nothing more.
+> - **Why now, not deferred to MOB-25/Phase 3:** three independent features
+>   (feat-012's cold-start reasoning, feat-013's composition-root friction, feat-014's
+>   Keychain-persistence finding) hit the identical wall — no app to integrate into or test
+>   against. That's convergent signal, not coincidence; re-deriving it later would mean
+>   re-discovering the same thing three separate times.
+> - **Side effect, not a promise:** manual checklist items 5 (cold-start) and 9 (Keychain
+>   relaunch persistence) are *expected* to become verifiable once this app exists, but are
+>   **not pre-marked verified** — only actually check them off once the app is built and each
+>   is run against it for real.
+> - **Cost flag, spike before committing further:** every throwaway harness so far
+>   (`scripts/size-budget`, the bare-clone consumer) has been a plain SPM package — no real
+>   iOS app bundle needed. A genuinely installable app for the Keychain-relaunch case likely
+>   needs an actual `.xcodeproj`, rougher to produce reliably from this environment than an
+>   SPM manifest. **Spike this specifically, early in the feature, before building anything on
+>   top of it** — if a reliable installable app turns out disproportionate to produce here,
+>   say so and re-scope together rather than pushing through something fragile that needs
+>   babysitting.
 
 **Decisions** — none yet (nothing implemented). **Blockers** — none.
 

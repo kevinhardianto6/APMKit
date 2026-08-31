@@ -16,25 +16,23 @@
 
 ## Next step
 
-feat-014 closed 2026-08-31 — full detail in `archive/features/feat-014.md`. AES-GCM on
-`FileDiskQueue`, key in Keychain, **real by default** (no composition root needed to opt in).
-Proven for real: macOS Keychain round-trip, real AES-GCM round-trip, real on-disk-bytes
-inspection (not plaintext), real Simulator write. **Not proven, added as checklist item 9:**
-true cross-app-relaunch Keychain persistence — `xcodebuild test` resets Keychain state between
-invocations regardless of app-binary identity (root-caused via `simctl spawn log show`), so
-the feat-009-style two-phase harness technique doesn't transfer here. Needs a real installed
-app to verify for real, which this repo doesn't have — same wall as feat-012's cold-start
-reasoning and feat-013's composition-root finding.
+feat-014 closed and committed (`3939eaa`) — full detail in `archive/features/feat-014.md`.
 
-Also fixed two **pre-existing** iOS-15-floor violations only a real Simulator build caught
-(macOS `swift test` doesn't enforce the same availability table): `Data.contains` (iOS 16+,
-in new test helpers) and Swift `Regex`/`firstMatch(of:)` (iOS 16+, in already-committed
-feat-013's `VersioningTests.swift` — a real bug in shipped work, not new).
+**feat-016 re-scoped, same day, before moving on:** the user asked for a recommendation on
+whether feat-016 should include a sample app, given feat-012/013/014 all independently hit the
+same "no app to test against" wall. Recommended yes — internal verification tooling only, not
+MOB-25's own published/maintained sample app (Phase 3 stays separate) — user agreed and asked
+it be written into `FEATURES.md` now. feat-016's entry and the epic-level notes both updated:
+minimal blank-screen app, lives outside the SDK's `Package.swift`, spike the `.xcodeproj` cost
+early and report back before building on it, checklist items 5/9 expected to close as a side
+effect but not pre-marked. Nothing implemented — planning only.
 
-**Not yet committed** — see `git status` before starting feat-015. Session history through
-feat-013 is in `archive/sessions/2026-08-30-feat-012-013-and-composition-root-decision.md`.
-The 5 unverified Phase 1 manual-checklist items (plus now 8, 9) stay open. Android port starts
-only after this epic closes.
+Next up: **feat-015 (Optional Certificate Pinning, opt-in P2)**, per the fixed order.
+
+Session history through feat-013 is in
+`archive/sessions/2026-08-30-feat-012-013-and-composition-root-decision.md`. The 5 unverified
+Phase 1 manual-checklist items (plus 8, 9) stay open. Android port starts only after this
+epic closes.
 
 ## Parked
 
@@ -49,18 +47,13 @@ only after this epic closes.
 
 - None.
 
-## Changes (this session)
+## Changes (this session, since feat-014's commit)
 
 | File | Change | Why |
 |------|--------|-----|
-| `FEATURES.md` | feat-016 (Composition Root) filed at user's direction after feat-013 review | New feature, scheduled before the pilot |
-| `Sources/APMKit/Storage/{DiskQueueKeyStore,DiskQueueEncryption}.swift` | Added | feat-014, SEC-08 |
-| `Sources/APMKit/Storage/FileDiskQueue.swift` | Encryption wired (real by default); `peek()` skips poison files instead of aborting the batch | feat-014 |
-| `Tests/APMKitTests/Storage/{DiskQueueKeyStoreTests,DiskQueueEncryptionTests,IOSDiskEncryptionHarnessTests}.swift` | Added | feat-014 evidence |
-| `Tests/APMKitTests/Support/DataContainsHelper.swift` | Added | iOS-15-compatible `Data` substring search (found via real Simulator build) |
-| `Tests/APMKitTests/{BreadcrumbLeakTests,PipelineEndToEndTests,UserIdentityLeakTests,Scrubbing/ScrubberTests}.swift` | `FileDiskQueue(..., encryption: nil)` | These test pre-encryption scrubbing, not encryption |
-| `Tests/APMKitTests/VersioningTests.swift` | Regex → NSRegularExpression | Real pre-existing iOS-15-floor bug, found via feat-014's Simulator build |
-| `FEATURES.md` | feat-014 → ✅, detail rotated, epic progress 4/6, checklist item 9 added | Feature closed |
-| `archive/features/feat-014.md` | Added — full detail incl. the Keychain-tooling finding | Rotation |
+| `FEATURES.md` | feat-016 entry expanded: internal verification app added to its scope, distinguished explicitly from MOB-25; epic-level note added | User-directed re-scope after reviewing the feat-012/013/014 pattern |
+
+Prior changes this session (feat-014 itself) are committed — see commit `3939eaa` and
+`archive/features/feat-014.md` for that detail, not repeated here.
 
 _Ground truth: run `git diff --stat` to confirm this table matches reality._
