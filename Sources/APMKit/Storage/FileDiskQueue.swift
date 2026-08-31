@@ -24,6 +24,7 @@ public final class FileDiskQueue: DiskQueue {
     private let configuration: Configuration
     private let fileManager: FileManager
     private let selfHealth: SelfHealthCounters
+    private let encryption: DiskQueueEncryption?
     private let encoder = JSONEncoder()
     private let decoder = JSONDecoder()
     private let accessQueue = DispatchQueue(label: "kit.apm.diskqueue")
@@ -34,16 +35,25 @@ public final class FileDiskQueue: DiskQueue {
     /// - Parameter selfHealth: eviction under the size/count cap (MOB-06) permanently drops an
     ///   event that was never sent — counted here (MOB-27, feat-010) since this is the one
     ///   place that decision happens.
+    /// - Parameter encryption: SEC-08 (feat-014) at-rest encryption, real by default
+    ///   (`AESGCMDiskQueueEncryption` over `KeychainDiskQueueKeyStore`) — every production
+    ///   caller that doesn't override this gets encryption automatically, no composition root
+    ///   required to opt in. Pass `nil` only when a test needs to inspect raw plaintext bytes
+    ///   (e.g. the SEC-01/05/06 "no PII on disk" leak tests, which test the scrubbing layer
+    ///   *before* encryption — testing post-encryption ciphertext there would trivially pass
+    ///   regardless of a scrubbing bug and prove nothing).
     public init(
         directoryURL: URL,
         configuration: Configuration = Configuration(),
         fileManager: FileManager = .default,
-        selfHealth: SelfHealthCounters = .shared
+        selfHealth: SelfHealthCounters = .shared,
+        encryption: DiskQueueEncryption? = AESGCMDiskQueueEncryption(keyStore: KeychainDiskQueueKeyStore())
     ) throws {
         self.directoryURL = directoryURL
         self.configuration = configuration
         self.fileManager = fileManager
         self.selfHealth = selfHealth
+        self.encryption = encryption
         try fileManager.createDirectory(at: directoryURL, withIntermediateDirectories: true)
         Self.applyDataProtection(to: directoryURL, fileManager: fileManager) // SEC-07
         self.nextSequence = try Self.recoverNextSequence(in: directoryURL, fileManager: fileManager)
@@ -54,17 +64,45 @@ public final class FileDiskQueue: DiskQueue {
             let sequence = nextSequence
             nextSequence += 1
             let url = fileURL(sequence: sequence, eventId: event.eventId)
-            let data = try encoder.encode(event)
+            var data = try encoder.encode(event)
+            if let encryption {
+                data = try encryption.encrypt(data)
+            }
             try data.write(to: url, options: .atomic)
             try evictIfNeeded()
         }
     }
 
+    /// Skips (never throws for) a single file that fails to decrypt or decode, rather than
+    /// aborting the whole batch — a "poison" file (a stale key after Keychain data loss, a
+    /// pre-upgrade plaintext file from before this SDK version added encryption, ...) must
+    /// never block every *other* already-encrypted event behind it from ever being read again
+    /// (`CONSTITUTION.md` rule #1). Left on disk rather than deleted — MOB-06 eviction
+    /// reclaims the space naturally under real pressure; deleting on a merely-ambiguous
+    /// failure would be a needless destructive step.
     public func peek(limit: Int) throws -> [Event] {
         try accessQueue.sync {
-            try orderedFiles().prefix(limit).map { url in
-                try decoder.decode(Event.self, from: try Data(contentsOf: url))
+            var events: [Event] = []
+            for url in try orderedFiles() {
+                guard events.count < limit else { break }
+                guard let rawData = try? Data(contentsOf: url) else { continue }
+                let decodable: Data
+                if let encryption {
+                    guard let decrypted = try? encryption.decrypt(rawData) else {
+                        selfHealth.recordDropped()
+                        continue
+                    }
+                    decodable = decrypted
+                } else {
+                    decodable = rawData
+                }
+                guard let event = try? decoder.decode(Event.self, from: decodable) else {
+                    selfHealth.recordDropped()
+                    continue
+                }
+                events.append(event)
             }
+            return events
         }
     }
 

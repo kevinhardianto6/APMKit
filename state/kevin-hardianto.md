@@ -7,48 +7,39 @@
 
 ## Now
 
-- **Objective:** Pre-Pilot Hardening epic (3/5) — remediating P0/P1/P2 gaps the shipped APM
+- **Objective:** Pre-Pilot Hardening epic (4/6) — remediating P0/P1/P2 gaps the shipped APM
   Kit iOS SDK epic left unfiled, before the Android port starts.
-- **Active feature:** none — feat-013 (Distribution: CocoaPods + semver) closed ✅. feat-014
-  (At-Rest Queue Encryption, SEC-08) is next per the epic's fixed order, not started.
+- **Active feature:** none — feat-014 (At-Rest Queue Encryption, SEC-08) closed ✅. feat-015
+  (Optional Certificate Pinning, opt-in P2) is next per the epic's fixed order, not started.
 - **Status:** —
-- **Last verify:** `./verify.sh all` → `HARNESS_VERIFY: PASS (all)`, 2026-08-30. 186 tests,
-  plus `budget` (binary-size delta ~360KB) and the new `podspec` check (`pod lib lint` passes).
+- **Last verify:** `./verify.sh build`/`test` → both PASS, 2026-08-31. 196 tests.
 
 ## Next step
 
-feat-013 closed 2026-08-30 — full detail rotated to `archive/features/feat-013.md`. All three
-of the user's explicit checkpoints covered:
-1. SPM external resolution verified with **real git+tag mechanics** (a bare clone tagged
-   `1.0.0`, a separate consumer package fetching it via `file://` URL, not a local path
-   dependency) — built and ran, printed the real linked `SDKInfo.current.version`.
-2. `APMKit.podspec` added, depending on `KSCrash/Recording` (matching SPM's product exactly).
-   **Found and fixed a real bug**, not assumed compatible: `pod lib lint` initially failed —
-   CocoaPods' `KSCrash` pod exposes one umbrella module (`import KSCrash`), not per-subspec
-   modules like SPM (`import KSCrashRecording`). Every KSCrash-touching file now imports
-   conditionally on `canImport(KSCrashRecording)`. Lints clean now.
-3. `VERSIONING.md` (MOB-24) — semver policy, current version 1.0.0, and a
-   `VersioningTests.swift` test locking `SDKInfo.current.version`/`APMKit.podspec`'s
-   `s.version` in sync (verified it actually catches drift, not just passes trivially).
+feat-014 closed 2026-08-31 — full detail in `archive/features/feat-014.md`. AES-GCM on
+`FileDiskQueue`, key in Keychain, **real by default** (no composition root needed to opt in).
+Proven for real: macOS Keychain round-trip, real AES-GCM round-trip, real on-disk-bytes
+inspection (not plaintext), real Simulator write. **Not proven, added as checklist item 9:**
+true cross-app-relaunch Keychain persistence — `xcodebuild test` resets Keychain state between
+invocations regardless of app-binary identity (root-caused via `simctl spawn log show`), so
+the feat-009-style two-phase harness technique doesn't transfer here. Needs a real installed
+app to verify for real, which this repo doesn't have — same wall as feat-012's cold-start
+reasoning and feat-013's composition-root finding.
 
-**Flagged per the user's explicit ask, not fixed (out of scope):** the SDK has no composition
-root — a from-scratch integration needs ~a dozen manually-wired pieces before the first event
-is captured. Real risk to MOB-25's "under 30 minutes" target. Written up in `VERSIONING.md` →
-"Integration friction" for whoever scopes that work next — not something to silently build
-here.
+Also fixed two **pre-existing** iOS-15-floor violations only a real Simulator build caught
+(macOS `swift test` doesn't enforce the same availability table): `Data.contains` (iOS 16+,
+in new test helpers) and Swift `Regex`/`firstMatch(of:)` (iOS 16+, in already-committed
+feat-013's `VersioningTests.swift` — a real bug in shipped work, not new).
 
-Session history before feat-013 (feat-010/011/012, the epic's filing/re-scope) is in
-`archive/sessions/2026-08-29-feat-010-011-and-hardening-epic.md`. The 5 unverified Phase 1
-manual-checklist items stay open — don't close them synthetically. Android port starts only
-after this epic closes.
+**Not yet committed** — see `git status` before starting feat-015. Session history through
+feat-013 is in `archive/sessions/2026-08-30-feat-012-013-and-composition-root-decision.md`.
+The 5 unverified Phase 1 manual-checklist items (plus now 8, 9) stay open. Android port starts
+only after this epic closes.
 
 ## Parked
 
 - **Android port** — sequenced *after* this epic. Parity notes:
   `archive/epics/phase-1-2-wrap-up.md` → "What an Android port would need for parity."
-- **Composition root** (`APM.start(configuration:)` or similar) — flagged this session as a
-  real MOB-25 risk, not yet scoped as its own feature. Raise with the user before MOB-25's
-  sample app/integration docs get written.
 
 ## In flight elsewhere
 
@@ -62,13 +53,14 @@ after this epic closes.
 
 | File | Change | Why |
 |------|--------|-----|
-| `APMKit.podspec` | Added | feat-013, MOB-23 — depends on `KSCrash/Recording` matching SPM |
-| `Sources/APMKit/APMKit.swift`, `Crash/{CrashReporter,CrashReportSource,CrashUserInfoStore}.swift`, `Stability/HangObserving.swift` | `import KSCrashRecording` → conditional on `canImport` | Real CocoaPods/SPM module-name mismatch found via `pod lib lint`, not assumed |
-| `VERSIONING.md` | Added | feat-013, MOB-24 — semver policy, two-manifest-sync risk, integration-friction writeup |
-| `Tests/APMKitTests/VersioningTests.swift` | Added | Locks `SDKInfo`/podspec version parity |
-| `verify.sh` | +`podspec` mode, included in `all` | feat-013 |
-| `AGENTS.md` | Verification section documents `podspec` | feat-013 |
-| `FEATURES.md` | feat-013 → ✅, detail rotated to archive, epic progress 3/5, composition-root finding called out at epic level | Feature closed |
-| `archive/features/feat-013.md` | Added — full detail | Rotation |
+| `FEATURES.md` | feat-016 (Composition Root) filed at user's direction after feat-013 review | New feature, scheduled before the pilot |
+| `Sources/APMKit/Storage/{DiskQueueKeyStore,DiskQueueEncryption}.swift` | Added | feat-014, SEC-08 |
+| `Sources/APMKit/Storage/FileDiskQueue.swift` | Encryption wired (real by default); `peek()` skips poison files instead of aborting the batch | feat-014 |
+| `Tests/APMKitTests/Storage/{DiskQueueKeyStoreTests,DiskQueueEncryptionTests,IOSDiskEncryptionHarnessTests}.swift` | Added | feat-014 evidence |
+| `Tests/APMKitTests/Support/DataContainsHelper.swift` | Added | iOS-15-compatible `Data` substring search (found via real Simulator build) |
+| `Tests/APMKitTests/{BreadcrumbLeakTests,PipelineEndToEndTests,UserIdentityLeakTests,Scrubbing/ScrubberTests}.swift` | `FileDiskQueue(..., encryption: nil)` | These test pre-encryption scrubbing, not encryption |
+| `Tests/APMKitTests/VersioningTests.swift` | Regex → NSRegularExpression | Real pre-existing iOS-15-floor bug, found via feat-014's Simulator build |
+| `FEATURES.md` | feat-014 → ✅, detail rotated, epic progress 4/6, checklist item 9 added | Feature closed |
+| `archive/features/feat-014.md` | Added — full detail incl. the Keychain-tooling finding | Rotation |
 
 _Ground truth: run `git diff --stat` to confirm this table matches reality._

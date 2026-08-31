@@ -19,7 +19,7 @@ struct BreadcrumbLeakTests {
     func phoneNumberInBreadcrumbNeverReachesDiskUnredacted() async throws {
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent("BreadcrumbLeakTests-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: dir) }
-        let diskQueue = try FileDiskQueue(directoryURL: dir)
+        let diskQueue = try FileDiskQueue(directoryURL: dir, encryption: nil) // feat-014: reads raw plaintext bytes below to test the SEC-01/05/06 scrubbing layer, not encryption
         let scrubber = Scrubber(downstream: DiskQueueEventSink(diskQueue: diskQueue))
 
         let rawPhoneNumber = "081234567890"

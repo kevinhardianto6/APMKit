@@ -27,7 +27,7 @@ struct UserIdentityLeakTests {
 
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent("UserIdentityLeakTests-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: dir) }
-        let diskQueue = try FileDiskQueue(directoryURL: dir)
+        let diskQueue = try FileDiskQueue(directoryURL: dir, encryption: nil) // feat-014: reads raw plaintext bytes below to test the SEC-01/05/06 scrubbing layer, not encryption
         let scrubber = Scrubber(downstream: DiskQueueEventSink(diskQueue: diskQueue))
         let sessionManager = SessionManager()
 

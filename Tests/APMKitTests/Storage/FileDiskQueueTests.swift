@@ -156,4 +156,56 @@ struct FileDiskQueueTests {
         try queue.remove(eventIds: [event.eventId])
         #expect(try queue.sizeInBytes() == 0)
     }
+
+    // MARK: - SEC-08 at-rest encryption (feat-014)
+
+    @Test("SEC-08: on-disk queue files are not readable as plaintext — real encryption is on by default")
+    func onDiskFilesAreNotPlaintext() throws {
+        let dir = tempDirectory()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        // Default init — no `encryption:` override — proving what a production caller who
+        // never touches this parameter actually gets.
+        let queue = try FileDiskQueue(directoryURL: dir)
+
+        try queue.enqueue(Event(
+            type: "network",
+            seq: 1,
+            attrs: ["host": .string("very-recognizable-host-name.example.com")]
+        ))
+
+        let files = try FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil)
+            .filter { $0.pathExtension == "json" }
+        #expect(files.count == 1)
+        let rawBytes = try Data(contentsOf: files[0])
+
+        // The event type and attribute value are guaranteed present in the plaintext JSON;
+        // their absence from the raw on-disk bytes is exactly SEC-08's requirement.
+        #expect(!dataContains(rawBytes, Data("network".utf8)))
+        #expect(!dataContains(rawBytes, Data("very-recognizable-host-name".utf8)))
+        // Not even readable as valid JSON.
+        #expect((try? JSONSerialization.jsonObject(with: rawBytes)) == nil)
+
+        // But the real queue, going through its own decrypt path, reads it back correctly.
+        let peeked = try queue.peek(limit: 10)
+        #expect(peeked.first?.type == "network")
+    }
+
+    @Test("a poison file (undecryptable/undecodable) is skipped, not fatal, doesn't block other events, and is counted as dropped")
+    func poisonFileIsSkippedNotFatal() throws {
+        let dir = tempDirectory()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let selfHealth = SelfHealthCounters()
+        let queue = try FileDiskQueue(directoryURL: dir, selfHealth: selfHealth)
+
+        try queue.enqueue(Event(type: "before", seq: 1))
+        // Simulates a pre-upgrade plaintext file, a corrupted write, or a stale key —
+        // garbage bytes the encryption layer can't decrypt.
+        try Data("not encrypted, not JSON, just garbage".utf8)
+            .write(to: dir.appendingPathComponent("00000000000000000001-poison.json"))
+        try queue.enqueue(Event(type: "after", seq: 2))
+
+        let events = try queue.peek(limit: 10) // must not throw
+        #expect(events.map(\.type) == ["before", "after"])
+        #expect(selfHealth.snapshot().dropped == 1)
+    }
 }

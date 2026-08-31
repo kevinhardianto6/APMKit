@@ -8,7 +8,7 @@
 
 | Epic | Progress | Active / open |
 |------|:--------:|---------------|
-| Pre-Pilot Hardening | 3/5 | feat-014 |
+| Pre-Pilot Hardening | 4/6 | feat-015 |
 
 ---
 
@@ -20,10 +20,14 @@ shipped APM Kit iOS SDK epic left unfiled, surfaced by that epic's own wrap-up
 (`archive/epics/phase-1-2-wrap-up.md` → "Real gaps"). **Prefix:** `feat-` (continues the same
 sequence — one SDK, one PRD family, no reason to fork numbering for a remediation pass).
 **Scope:** SEC-10/11/12 (TLS floor, fail-closed, optional pinning), the docs/02 §5 performance
-budget, MOB-23/24 (distribution), SEC-08 (at-rest encryption). Explicitly **not** in scope:
-Android (blocked on this epic per the user's own sequencing — parity notes are ready in the
-wrap-up above, Android work starts after), MOB-22 (sampling), SEC-14 (key rotation), MOB-26
-(debug logging) — those remain unfiled gaps, not silently rolled into this epic.
+budget, MOB-23/24 (distribution), SEC-08 (at-rest encryption), and (added 2026-08-31) a
+composition root — feat-016 isn't itself a numbered docs/02 requirement; it's the user's
+direct response to a real risk feat-013 surfaced against MOB-25's integration-time target, so
+it belongs in this pre-pilot epic rather than waiting for MOB-25 itself (Phase 3). Explicitly
+**not** in scope: Android (blocked on this epic per the user's own sequencing — parity notes
+are ready in the wrap-up above, Android work starts after), MOB-22 (sampling), SEC-14 (key
+rotation), MOB-26 (debug logging) — those remain unfiled gaps, not silently rolled into this
+epic.
 **Started:** 2026-08-29 · **Started by:** Kevin Hardianto
 
 > **2026-08-29 re-scope:** SEC-11 (cert pinning on the SDK's own ingest connection) demoted
@@ -41,10 +45,12 @@ wrap-up above, Android work starts after), MOB-22 (sampling), SEC-14 (key rotati
 Ordering is deliberate, per the user's own reasoning, not just numeric — TLS floor +
 fail-closed first because it's small and P0; performance budget second because "violated =
 don't ship" per spec wording; distribution third because it blocks other teams adopting the
-SDK at all; at-rest encryption fourth because it can trail; optional pinning last because it's
-now P2 and opt-in, the lowest-urgency item in the epic. Build order is otherwise the same
-mandatory rule as before (`CONSTITUTION.md` → Prohibitions — process): one feature active at a
-time, stop for review after each.
+SDK at all; at-rest encryption fourth because it can trail; optional pinning fifth because it's
+P2 and opt-in, the lowest-urgency item in the epic; **composition root last, deliberately after
+feat-014/015** — it should assemble and wire the pipeline these already-built pieces produce
+(including feat-015's pinning config, if enabled), not be built before they exist and then
+patched. Build order is otherwise the same mandatory rule as before (`CONSTITUTION.md` →
+Prohibitions — process): one feature active at a time, stop for review after each.
 
 > **2026-08-30, feat-013:** found and fixed a real CocoaPods/SPM incompatibility — CocoaPods'
 > `KSCrash` pod exposes one umbrella module (`import KSCrash`), not per-subspec modules like
@@ -53,33 +59,38 @@ time, stop for review after each.
 > SDK has no composition root** — a from-scratch integration needs roughly a dozen manually-
 > wired pieces before the first event is captured, a real risk to MOB-25's "under 30 minutes"
 > target. See `VERSIONING.md` → "Integration friction" and `archive/features/feat-013.md`.
+>
+> **2026-08-31:** the composition-root flag above got a feature, not a deferral — **feat-016**,
+> scheduled before the pilot rather than left for MOB-25/Phase 3. User's reasoning: MOB-25's
+> 30-minute target is part of what the pilot is meant to test, not a nice-to-have; hand-
+> assembling a dozen components tests the integrator's patience, not the SDK. Every manual
+> wiring step is also a repeat of a risk class this project has already closed twice by making
+> forgetting structurally impossible instead of relying on integrator memory — feat-005's
+> anti-loop guarantee (MOB-09/10) and feat-009's pending-crash-report drain
+> (`installCrashReporting` folding in what used to be a separate `processPendingCrashReports`
+> call). A single correct entry point is the same fix shape, applied to the whole integration
+> instead of one leak at a time.
+>
+> **2026-08-31, feat-014:** encryption itself proven for real (macOS Keychain round-trip, real
+> AES-GCM round-trip, real on-disk ciphertext inspection, real Simulator write). What's
+> **not** proven: true cross-app-relaunch Keychain persistence — `xcodebuild test`'s XCTest
+> infrastructure resets Keychain state between separate invocations regardless of app-binary
+> identity (root-caused via `simctl spawn log show`), so the two-phase harness technique that
+> worked for feat-009's crash reports doesn't transfer to Keychain. Same underlying gap as
+> feat-012's cold-start reasoning and feat-013's composition-root finding: **no sample host
+> app exists in this repo** to install-and-relaunch for real instead of via XCTest. Added to
+> the manual checklist (item 9) rather than claimed proven. Also fixed two **pre-existing**
+> iOS-15-floor violations (`Data.contains`, Swift `Regex`) that only a real Simulator build —
+> not `swift test` on macOS — could have caught; one was in already-committed feat-013 work.
 
 | ID | Feature | Status | By | Depends on | Requirements | Evidence |
 |----|---------|:------:|----|------------|--------------|----------|
 | feat-011 | TLS Floor + Fail-Closed | ✅ | Kevin Hardianto | feat-005, feat-010 | SEC-10, SEC-12 | [archive](archive/features/feat-011.md) |
 | feat-012 | Performance Budget (CI-enforced) | ✅ | Kevin Hardianto | feat-001..010 | docs/02 §5 | [archive](archive/features/feat-012.md) |
 | feat-013 | Distribution (CocoaPods + semver) | ✅ | Kevin Hardianto | feat-001..010 | MOB-23/24 | [archive](archive/features/feat-013.md) |
-| feat-014 | At-Rest Queue Encryption | 🟡 | — | feat-002 | SEC-08 | — |
+| feat-014 | At-Rest Queue Encryption | ✅ | Kevin Hardianto | feat-002 | SEC-08 | [archive](archive/features/feat-014.md) |
 | feat-015 | Optional Certificate Pinning (opt-in, P2) | 🟡 | — | feat-011, feat-010 | SEC-11 | — |
-
-### feat-014 · At-Rest Queue Encryption
-
-- **Status:** 🟡 not started · **Depends on:** feat-002 (`FileDiskQueue` — what gets encrypted)
-- **Requirements:** SEC-08 — AES-GCM encryption of the on-disk event queue, key in Keychain
-  (not `UserDefaults` — nothing in this SDK uses Keychain yet; this is the first feature that
-  will). Must stay defensive per `CONSTITUTION.md` rule #1: a Keychain access failure must
-  never throw into the host app.
-- **Notable side effect, not a separate task:** feat-009's SEC-09 decision explicitly assumed
-  this control exists ("crash report... dienkripsi saat peluncuran aplikasi berikutnya") and
-  it didn't, until now. `CrashReportProcessor` already routes crash reports through the same
-  `sink`/disk-queue pipeline as every other event (feat-009's own design) — so encrypting the
-  queue here closes that assumption retroactively, without CrashReportProcessor itself needing
-  any change. Worth confirming this explicitly when the feature closes, not just assuming it.
-- **Done when:** on-disk queue files are not readable as plaintext (direct file inspection
-  shows ciphertext, not JSON); a Keychain round-trip (write key, kill process, re-read key,
-  decrypt existing queue) is verified on a real iOS Simulator — Keychain isn't meaningfully
-  testable on the macOS host toolchain the same way `sysctl`-based checks are, so this likely
-  needs the same `IOSCrashHarnessTests`-style real-Simulator harness feat-009/010 built.
+| feat-016 | Composition Root (`APM.start`) | 🟡 | — | feat-014, feat-015 | MOB-25 (integration-time risk) | — |
 
 ### feat-015 · Optional Certificate Pinning (opt-in, P2)
 
@@ -106,6 +117,30 @@ time, stop for review after each.
   drops to the TLS floor, still verified) and back on re-enables it — proven the same way
   feat-010 proved the master kill switch: one test, real pipeline/session types, not fakes.
 
+### feat-016 · Composition Root (`APM.start`)
+
+- **Status:** 🟡 not started · **Depends on:** feat-014 (at-rest encryption — the disk queue
+  this assembles needs to be the encrypted one), feat-015 (pinning config — `APM.start`'s
+  config surface needs to include the opt-in pinning knob, not be built before it exists and
+  patched afterward)
+- **Requirements (per the user, 2026-08-31):**
+  - One `APM.start(configuration:)` that assembles and wires the pipeline correctly *by
+    construction* — `SessionManager`, `FileDiskQueue`, `Scrubber`/`KillSwitch` chain,
+    `EnvelopeFactory`, `IngestClient`/`SyncEngine` with its background/connectivity triggers
+    actually wired to real `UIApplication`/`NWPathMonitor` notifications (not left for the
+    integrator to remember, the same class of gap `AutomaticBreadcrumbSource` already leaves
+    open today), crash reporting, hang detection, remote config fetch.
+  - The existing granular types (`SessionManager`, `FileDiskQueue`, `IngestClient`,
+    `SyncEngine`, every `APM.*` call, …) **stay public** for advanced/custom use — this is an
+    additive convenience layer, not a replacement that locks anyone out of the pieces.
+  - Same "make forgetting structurally impossible" shape as MOB-09/10's anti-loop guarantee
+    (feat-005) and `installCrashReporting`'s pending-report drain (feat-009) — a single entry
+    point that can't be assembled wrong, not documentation asking the integrator to remember
+    a dozen steps in the right order.
+- **Done when:** a from-scratch integration in a fresh project, timed, completes in under 30
+  minutes following only the written docs — MOB-25's actual target, measured directly rather
+  than assumed satisfied because a composition root exists. Not satisfied by unit tests alone.
+
 **Decisions** — none yet (nothing implemented). **Blockers** — none.
 
 ---
@@ -129,10 +164,12 @@ and feat-009's Blockers; consolidated here 2026-08-28 so it's one list, not seve
 | 6 | A forced crash captured by real KSCrash on iOS Simulator/device, appearing correctly after relaunch (feat-009's actual "Done when" criterion). | feat-009 | ☑ verified 2026-08-28 — `IOSCrashHarnessTests.phase1_forceCrash`/`phase2_readBackAfterRelaunch`, run via `xcodebuild test` against a booted iOS 18.0 Simulator; re-runnable any time per that file's header comment. |
 | 7 | A real >2s main-thread block detected live by KSCrash's `Watchdog` monitor + `HangDetector`, without the detector itself blocking or hanging (MOB-18's actual "Done when"). | feat-010 | ☑ verified 2026-08-29 — `IOSCrashHarnessTests.phase3_hangDetection`, same Simulator/invocation pattern as item 6. |
 | 8 | The `.github/workflows/ci.yml` GitHub Actions workflow (feat-012) actually fires and gates a real PR — unverified in this environment because this repo has no git remote configured here. Its YAML is syntax-valid and it runs the same `./verify.sh all` already verified to pass locally. | feat-012 | ☐ not verified |
+| 9 | True cross-app-relaunch Keychain persistence for SEC-08's encryption key (does the queue encrypted by one app launch still decrypt after the app is quit and relaunched — not via `xcodebuild test`, which resets Keychain state between invocations regardless of app identity, confirmed via `simctl spawn log show`). Needs a real installed app (device or `simctl install`/`launch` outside XCTest), which doesn't exist in this repo yet. | feat-014 | ☐ not verified |
 
-Items 1–5 (feat-002/007/008, Phase 1) remain unverified as of 2026-08-30 — feat-009/010 added
+Items 1–5 (feat-002/007/008, Phase 1) remain unverified as of 2026-08-31 — feat-009/010 added
 their own device-only checks (6, 7) but did not re-visit these; feat-012 narrowed item 5's
-scope but didn't close it. Still the running punch list before the pilot ships.
+scope but didn't close it. feat-014 added item 9, its own genuinely-unverified gap. Still the
+running punch list before the pilot ships.
 
 ## Shipped
 
