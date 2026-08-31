@@ -1,5 +1,9 @@
 import Foundation
-import KSCrashRecording
+#if canImport(KSCrashRecording)
+import KSCrashRecording  // SPM: module name matches the "Recording" product
+#else
+import KSCrash  // CocoaPods: the KSCrash pod exposes one umbrella module, not per-subspec ones (feat-013)
+#endif
 
 /// Narrow interface over `KSCrash`'s per-key user-info API (`KSCrash+UserInfo.h`) — backed by
 /// an mmap'd sidecar with zero crash-time allocation cost, unlike the deprecated bulk

@@ -1,6 +1,6 @@
 #!/bin/bash
 # Harness verification for APMKit. Run from repo root.
-# Usage: ./verify.sh [build|test|lint|budget|all]   (default: build)
+# Usage: ./verify.sh [build|test|lint|budget|podspec|all]   (default: build)
 # Always ends with a machine-parseable line: HARNESS_VERIFY: PASS|FAIL
 set -eo pipefail
 
@@ -41,13 +41,30 @@ run_budget() {
   [ "$status" -eq 0 ] || fail "budget"
 }
 
+# feat-013 (MOB-23): validates APMKit.podspec actually resolves and links under CocoaPods —
+# not just that the manifest parses. Fetches KSCrash over the network and builds a throwaway
+# host app, so it's slower than the rest of `verify.sh` (~1-2 min) and network-dependent;
+# that's why it's its own mode rather than folded silently into `test`. Requires the `pod`
+# CLI (CocoaPods) — GitHub-hosted macOS runners have it preinstalled.
+run_podspec() {
+  if ! command -v pod >/dev/null 2>&1; then
+    fail "podspec (CocoaPods 'pod' CLI not found — install with 'gem install cocoapods')"
+  fi
+  set +e
+  pod lib lint APMKit.podspec --allow-warnings --sources=https://cdn.cocoapods.org/ 2>&1 | tee /tmp/verify_podspec.log | tail -30
+  local status="${PIPESTATUS[0]}"
+  set -e
+  [ "$status" -eq 0 ] || fail "podspec"
+}
+
 case "$MODE" in
-  build)  run_build ;;
-  test)   run_test ;;
-  lint)   run_lint ;;
-  budget) run_budget ;;
-  all)    run_build && run_test && run_lint && run_budget ;;
-  *)      echo "Unknown mode: $MODE (use build|test|lint|budget|all)"; exit 2 ;;
+  build)    run_build ;;
+  test)     run_test ;;
+  lint)     run_lint ;;
+  budget)   run_budget ;;
+  podspec)  run_podspec ;;
+  all)      run_build && run_test && run_lint && run_budget && run_podspec ;;
+  *)        echo "Unknown mode: $MODE (use build|test|lint|budget|podspec|all)"; exit 2 ;;
 esac
 
 echo "HARNESS_VERIFY: PASS ($MODE)"

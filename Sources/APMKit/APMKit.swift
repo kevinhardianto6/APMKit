@@ -1,5 +1,9 @@
 import Foundation
-import KSCrashRecording
+#if canImport(KSCrashRecording)
+import KSCrashRecording  // SPM: module name matches the "Recording" product
+#else
+import KSCrash  // CocoaPods: the KSCrash pod exposes one umbrella module, not per-subspec ones (feat-013)
+#endif
 
 /// Public entry point. Every method here is a boundary the host app calls across —
 /// `CONSTITUTION.md` rule #1 applies from the first line of every one of them.

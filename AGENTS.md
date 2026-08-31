@@ -38,8 +38,9 @@ Run before claiming any work done. All checks must pass.
 ```bash
 ./verify.sh build
 ./verify.sh test
-./verify.sh budget   # binary-size budget, docs/02 §5 (feat-012)
-./verify.sh all      # build + test + lint + budget
+./verify.sh budget    # binary-size budget, docs/02 §5 (feat-012)
+./verify.sh podspec   # pod lib lint against APMKit.podspec (feat-013, MOB-23) — slow, network
+./verify.sh all       # build + test + lint + budget + podspec
 ```
 
 `verify.sh` wraps `swift build` / `swift test` and prints a final `HARNESS_VERIFY: PASS` /
@@ -58,6 +59,11 @@ platform-conditional behavior.
 is CI-checkable: CPU/memory/cold-start need real-device profiling under realistic load, not
 something a CI runner can measure honestly — those stay on the manual verification checklist
 in `FEATURES.md`, not synthesized here. See `archive/features/feat-012.md` for the reasoning.
+
+`./verify.sh podspec` (feat-013, MOB-23) validates `APMKit.podspec` actually resolves and
+links under CocoaPods, not just that it parses — requires the `pod` CLI and network access
+(fetches KSCrash), which is why it's a separate mode from `test`. Distribution/versioning
+policy (MOB-24): `VERSIONING.md`.
 
 Only checks this project actually has are listed. Do not invent lint/e2e steps.
 

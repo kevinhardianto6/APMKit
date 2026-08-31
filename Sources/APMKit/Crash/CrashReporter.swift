@@ -1,5 +1,9 @@
 import Foundation
-import KSCrashRecording
+#if canImport(KSCrashRecording)
+import KSCrashRecording  // SPM: module name matches the "Recording" product
+#else
+import KSCrash  // CocoaPods: the KSCrash pod exposes one umbrella module, not per-subspec ones (feat-013)
+#endif
 
 /// Installs and configures KSCrash (docs/02 §3.5, MOB-15/16/17) — wraps a mature crash
 /// library rather than hand-rolling signal/mach handlers (`CONSTITUTION.md` platform

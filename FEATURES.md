@@ -8,7 +8,7 @@
 
 | Epic | Progress | Active / open |
 |------|:--------:|---------------|
-| Pre-Pilot Hardening | 2/5 | feat-013 |
+| Pre-Pilot Hardening | 3/5 | feat-014 |
 
 ---
 
@@ -46,24 +46,21 @@ now P2 and opt-in, the lowest-urgency item in the epic. Build order is otherwise
 mandatory rule as before (`CONSTITUTION.md` → Prohibitions — process): one feature active at a
 time, stop for review after each.
 
+> **2026-08-30, feat-013:** found and fixed a real CocoaPods/SPM incompatibility — CocoaPods'
+> `KSCrash` pod exposes one umbrella module (`import KSCrash`), not per-subspec modules like
+> SPM (`import KSCrashRecording`); every KSCrash-touching file now imports conditionally on
+> `canImport(KSCrashRecording)`. Also flagged, not fixed (out of this feature's scope): **the
+> SDK has no composition root** — a from-scratch integration needs roughly a dozen manually-
+> wired pieces before the first event is captured, a real risk to MOB-25's "under 30 minutes"
+> target. See `VERSIONING.md` → "Integration friction" and `archive/features/feat-013.md`.
+
 | ID | Feature | Status | By | Depends on | Requirements | Evidence |
 |----|---------|:------:|----|------------|--------------|----------|
 | feat-011 | TLS Floor + Fail-Closed | ✅ | Kevin Hardianto | feat-005, feat-010 | SEC-10, SEC-12 | [archive](archive/features/feat-011.md) |
 | feat-012 | Performance Budget (CI-enforced) | ✅ | Kevin Hardianto | feat-001..010 | docs/02 §5 | [archive](archive/features/feat-012.md) |
-| feat-013 | Distribution (CocoaPods + semver) | 🟡 | — | feat-001..010 | MOB-23/24 | — |
+| feat-013 | Distribution (CocoaPods + semver) | ✅ | Kevin Hardianto | feat-001..010 | MOB-23/24 | [archive](archive/features/feat-013.md) |
 | feat-014 | At-Rest Queue Encryption | 🟡 | — | feat-002 | SEC-08 | — |
 | feat-015 | Optional Certificate Pinning (opt-in, P2) | 🟡 | — | feat-011, feat-010 | SEC-11 | — |
-
-### feat-013 · Distribution (CocoaPods + semver)
-
-- **Status:** 🟡 not started · **Depends on:** feat-001..010 (packages the whole SDK as it
-  exists today)
-- **Requirements:** MOB-23 — CocoaPods distribution alongside the existing SPM support (no
-  change to SPM itself). MOB-24 — semver policy, a compatibility/changelog document, and the
-  rule that breaking changes only land at a major version.
-- **Done when:** a generated podspec passes `pod spec lint` (or equivalent local validation —
-  no CocoaPods trunk push implied by "done" here, that's a release-process concern); a
-  versioning document exists stating the policy and the SDK's current version number.
 
 ### feat-014 · At-Rest Queue Encryption
 

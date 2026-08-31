@@ -1,5 +1,9 @@
 import Foundation
-import KSCrashRecording
+#if canImport(KSCrashRecording)
+import KSCrashRecording  // SPM: module name matches the "Recording" product
+#else
+import KSCrash  // CocoaPods: the KSCrash pod exposes one umbrella module, not per-subspec ones (feat-013)
+#endif
 
 /// This SDK's own vocabulary for a hang state change — decoupled from KSCrash's
 /// `HangChangeType`, same reasoning as `CrashReportSource` wrapping KSCrash's report store:
