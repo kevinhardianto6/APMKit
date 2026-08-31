@@ -8,6 +8,12 @@ import Security
 /// special entitlements. Each test uses a unique service/account (a UUID suffix) and cleans up
 /// after itself, so repeated runs don't accumulate stale items in the developer's real login
 /// keychain.
+///
+/// **feat-015 note:** every `store.key()` call and manual `SecItemDelete` below goes through
+/// `KeychainTestLock` — added after feat-015's `TLSMockServer` test infra (also real-Keychain
+/// backed) started intermittently causing `KeychainDiskQueueKeyStore.storeKey`'s `SecItemAdd`
+/// to lose a race under Swift Testing's parallel execution, silently returning a key that never
+/// actually got persisted. See `KeychainTestLock`'s doc comment for the full story.
 @Suite("KeychainDiskQueueKeyStore — SEC-08 key persistence (feat-014)")
 struct DiskQueueKeyStoreTests {
     private func makeStore() -> (store: KeychainDiskQueueKeyStore, cleanup: () -> Void) {
@@ -20,7 +26,7 @@ struct DiskQueueKeyStoreTests {
                 kSecAttrService as String: service,
                 kSecAttrAccount as String: account
             ]
-            SecItemDelete(query as CFDictionary)
+            KeychainTestLock.sync { SecItemDelete(query as CFDictionary) }
         }
         return (store, cleanup)
     }
@@ -30,7 +36,7 @@ struct DiskQueueKeyStoreTests {
         let (store, cleanup) = makeStore()
         defer { cleanup() }
 
-        let key = store.key()
+        let key = KeychainTestLock.sync { store.key() }
         #expect(key.bitCount == 256)
     }
 
@@ -39,7 +45,7 @@ struct DiskQueueKeyStoreTests {
         let (store, cleanup) = makeStore()
         defer { cleanup() }
 
-        #expect(store.key() == store.key())
+        #expect(KeychainTestLock.sync { store.key() } == KeychainTestLock.sync { store.key() })
     }
 
     @Test("a NEW store instance, same service/account, reads back the SAME persisted key — real Keychain round-trip, not in-memory only")
@@ -47,10 +53,10 @@ struct DiskQueueKeyStoreTests {
         let service = "kit.apm.diskqueue-test-\(UUID().uuidString)"
         let account = "encryption-key"
         let first = KeychainDiskQueueKeyStore(service: service, account: account)
-        let firstKey = first.key()
+        let firstKey = KeychainTestLock.sync { first.key() }
 
         let second = KeychainDiskQueueKeyStore(service: service, account: account)
-        let secondKey = second.key()
+        let secondKey = KeychainTestLock.sync { second.key() }
 
         #expect(firstKey == secondKey)
 
@@ -59,7 +65,7 @@ struct DiskQueueKeyStoreTests {
             kSecAttrService as String: service,
             kSecAttrAccount as String: account
         ]
-        SecItemDelete(query as CFDictionary)
+        KeychainTestLock.sync { SecItemDelete(query as CFDictionary) }
     }
 
     @Test("different service/account pairs get independent keys")
@@ -68,6 +74,6 @@ struct DiskQueueKeyStoreTests {
         let (storeB, cleanupB) = makeStore()
         defer { cleanupA(); cleanupB() }
 
-        #expect(storeA.key() != storeB.key())
+        #expect(KeychainTestLock.sync { storeA.key() } != KeychainTestLock.sync { storeB.key() })
     }
 }

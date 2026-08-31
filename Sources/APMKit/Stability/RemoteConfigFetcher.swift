@@ -8,14 +8,28 @@ import Foundation
 /// **SEC-10/12** (feat-011): same TLS floor (`SDKOwnedSessionConfiguration`) and same
 /// fail-closed shape as `IngestClient` — any failure (network error, non-200, malformed body,
 /// or a TLS-layer failure) yields `nil`, never a partial/unprotected read of the response.
+///
+/// **SEC-11 (feat-015):** same optional `pinning` shape as `IngestClient` — `nil` (default)
+/// keeps this exactly as feat-011 left it, no delegate at all.
 public final class RemoteConfigFetcher {
     private let endpoint: IngestEndpoint
     let session: URLSession
     private let decoder = JSONDecoder()
 
-    public init(endpoint: IngestEndpoint, session: URLSession = URLSession(configuration: SDKOwnedSessionConfiguration.make())) {
+    public init(
+        endpoint: IngestEndpoint,
+        pinning: CertificatePinning? = nil,
+        session: URLSession? = nil
+    ) {
         self.endpoint = endpoint
-        self.session = session
+        if let session {
+            self.session = session
+        } else if let pinning {
+            let delegate = PinningSessionDelegate(pinning: pinning)
+            self.session = URLSession(configuration: SDKOwnedSessionConfiguration.make(), delegate: delegate, delegateQueue: nil)
+        } else {
+            self.session = URLSession(configuration: SDKOwnedSessionConfiguration.make())
+        }
     }
 
     /// `nil` on any failure (network error, non-200, malformed body) — the caller

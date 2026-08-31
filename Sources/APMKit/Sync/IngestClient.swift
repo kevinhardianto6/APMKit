@@ -11,6 +11,11 @@ import Foundation
 /// path anywhere in this type, `outcome(response:error:)`, or `SyncEngine`'s handling of its
 /// result that retries a failed request over a weaker connection — every failure keeps the
 /// batch on disk and retries the identical request against the identical session/URL.
+///
+/// **SEC-11 (feat-015):** `pinning`, when supplied, attaches a `PinningSessionDelegate` to
+/// this client's own session. Left `nil` (the default), the session is built exactly as
+/// feat-011 left it — no delegate at all, preserving the `session.delegate == nil` assertion
+/// MOB-09's anti-loop test already makes.
 public final class IngestClient: IngestUploading {
     private let endpoint: IngestEndpoint
     /// Internal, not private: `MOB-09`'s anti-loop guarantee ("uploader MUST use a separate,
@@ -19,9 +24,26 @@ public final class IngestClient: IngestUploading {
     let session: URLSession
     private let encoder = JSONEncoder()
 
-    public init(endpoint: IngestEndpoint, session: URLSession = URLSession(configuration: SDKOwnedSessionConfiguration.make())) {
+    /// `pinning` is ignored when `session` is passed explicitly (tests that supply their own
+    /// session already control its delegate). Otherwise: no `pinning` → the plain feat-011
+    /// session, exactly as before this feature — no delegate, no pinning code path active.
+    /// `pinning` supplied → a session built with `PinningSessionDelegate`. `CertificatePinning`
+    /// bundles the pin material with the `RemoteConfigStore` that carries its kill switch, so
+    /// there is no way to pass one without the other (SEC-11).
+    public init(
+        endpoint: IngestEndpoint,
+        pinning: CertificatePinning? = nil,
+        session: URLSession? = nil
+    ) {
         self.endpoint = endpoint
-        self.session = session
+        if let session {
+            self.session = session
+        } else if let pinning {
+            let delegate = PinningSessionDelegate(pinning: pinning)
+            self.session = URLSession(configuration: SDKOwnedSessionConfiguration.make(), delegate: delegate, delegateQueue: nil)
+        } else {
+            self.session = URLSession(configuration: SDKOwnedSessionConfiguration.make())
+        }
     }
 
     public func upload(envelope: Envelope, completion: @escaping (UploadOutcome) -> Void) {

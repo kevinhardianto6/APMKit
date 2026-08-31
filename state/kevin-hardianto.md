@@ -9,25 +9,26 @@
 
 - **Objective:** Pre-Pilot Hardening epic (4/6) — remediating P0/P1/P2 gaps the shipped APM
   Kit iOS SDK epic left unfiled, before the Android port starts.
-- **Active feature:** none — feat-014 (At-Rest Queue Encryption, SEC-08) closed ✅. feat-015
-  (Optional Certificate Pinning, opt-in P2) is next per the epic's fixed order, not started.
+- **Active feature:** none — feat-015 (Optional Certificate Pinning, SEC-11) closed ✅. feat-016
+  (Composition Root) is next per the epic's fixed order, not started.
 - **Status:** —
-- **Last verify:** `./verify.sh build`/`test` → both PASS, 2026-08-31. 196 tests.
+- **Last verify:** `./verify.sh build`/`test`/`budget` → all PASS, 2026-08-31. 214 tests.
 
 ## Next step
 
-feat-014 closed and committed (`3939eaa`) — full detail in `archive/features/feat-014.md`.
+feat-015 closed — full detail, including two real bugs found in this session's own new test
+infra (a `TLSMockServer` request-race and a keychain-contention flake introduced into
+feat-014's pre-existing `DiskQueueKeyStoreTests`, both fixed) and the full-cert-vs-SPKI pinning
+decision, is in `archive/features/feat-015.md`. Built from scratch: real TLS test
+infrastructure (`Tests/APMKitTests/Support/TLSMockServer.swift`) — nothing in this repo could
+drive a genuine TLS handshake before this feature; feat-011 had explicitly worked around that
+gap and flagged it as a known limitation for whenever pinning needed real cert content.
 
-**feat-016 re-scoped, same day, before moving on:** the user asked for a recommendation on
-whether feat-016 should include a sample app, given feat-012/013/014 all independently hit the
-same "no app to test against" wall. Recommended yes — internal verification tooling only, not
-MOB-25's own published/maintained sample app (Phase 3 stays separate) — user agreed and asked
-it be written into `FEATURES.md` now. feat-016's entry and the epic-level notes both updated:
-minimal blank-screen app, lives outside the SDK's `Package.swift`, spike the `.xcodeproj` cost
-early and report back before building on it, checklist items 5/9 expected to close as a side
-effect but not pre-marked. Nothing implemented — planning only.
-
-Next up: **feat-015 (Optional Certificate Pinning, opt-in P2)**, per the fixed order.
+Next up: **feat-016 (Composition Root, `APM.start`)**, per the fixed order — depends on feat-014
+and feat-015, both now ✅, so it's ready. Per `CONSTITUTION.md`'s build order, this is a stop-
+for-review point: do not start feat-016 in the same sitting as feat-015 without the user's go-
+ahead. feat-016's scope already includes the internal verification app spike (see its
+`FEATURES.md` entry) — start there per its own "spike before building on it" instruction.
 
 Session history through feat-013 is in
 `archive/sessions/2026-08-30-feat-012-013-and-composition-root-decision.md`. The 5 unverified
@@ -51,9 +52,24 @@ epic closes.
 
 | File | Change | Why |
 |------|--------|-----|
-| `FEATURES.md` | feat-016 entry expanded: internal verification app added to its scope, distinguished explicitly from MOB-25; epic-level note added | User-directed re-scope after reviewing the feat-012/013/014 pattern |
+| `FEATURES.md` | feat-016 entry expanded: internal verification app added to its scope; feat-015 marked ✅, detail rotated to archive; epic progress 4/6 → 5/6 | User-directed re-scope, then feat-015 close |
+| `Sources/APMKit/Sync/CertificatePinningConfiguration.swift` | new: pin type + `CertificatePinning` bundle | feat-015 |
+| `Sources/APMKit/Sync/CertificatePinningValidator.swift` | new: pure pin-match logic | feat-015 |
+| `Sources/APMKit/Sync/PinningSessionDelegate.swift` | new: `URLSessionDelegate`, kill-switch aware | feat-015 |
+| `Sources/APMKit/Sync/IngestClient.swift` | optional `pinning:` param, session-build branch | feat-015 |
+| `Sources/APMKit/Stability/RemoteConfigFetcher.swift` | same `pinning:` param as `IngestClient` | feat-015 |
+| `Tests/APMKitTests/Support/TLSMockServer.swift` | new: real self-signed-cert TLS test server (no prior TLS test infra existed) | feat-015 |
+| `Tests/APMKitTests/Support/TLSMockServerTests.swift` | new: sanity tests for the fixture itself | feat-015 |
+| `Tests/APMKitTests/Support/KeychainTestLock.swift` | new: shared keychain-serialization lock | feat-015 (fixes a flake this session's own test infra introduced) |
+| `Tests/APMKitTests/Storage/DiskQueueKeyStoreTests.swift` | wrapped keychain calls in `KeychainTestLock` | feat-015 flake fix, no assertion changes |
+| `Tests/APMKitTests/Sync/CertificatePinningConfigurationTests.swift` | new | feat-015 |
+| `Tests/APMKitTests/Sync/CertificatePinningValidatorTests.swift` | new | feat-015 |
+| `Tests/APMKitTests/Sync/CertificatePinningTests.swift` | new: the "Done when" tests | feat-015 |
+| `archive/features/feat-015.md` | new: full feature detail, rotated per closure | feat-015 close |
 
 Prior changes this session (feat-014 itself) are committed — see commit `3939eaa` and
-`archive/features/feat-014.md` for that detail, not repeated here.
+`archive/features/feat-014.md` for that detail, not repeated here. **feat-015's changes above
+are not yet committed** — its own commit is a separate step (`git commit`, not done by this
+agent per `CONSTITUTION.md`'s "never auto-commit").
 
 _Ground truth: run `git diff --stat` to confirm this table matches reality._

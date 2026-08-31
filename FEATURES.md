@@ -8,7 +8,7 @@
 
 | Epic | Progress | Active / open |
 |------|:--------:|---------------|
-| Pre-Pilot Hardening | 4/6 | feat-015 |
+| Pre-Pilot Hardening | 5/6 | feat-016 |
 
 ---
 
@@ -97,33 +97,8 @@ Prohibitions — process): one feature active at a time, stop for review after e
 | feat-012 | Performance Budget (CI-enforced) | ✅ | Kevin Hardianto | feat-001..010 | docs/02 §5 | [archive](archive/features/feat-012.md) |
 | feat-013 | Distribution (CocoaPods + semver) | ✅ | Kevin Hardianto | feat-001..010 | MOB-23/24 | [archive](archive/features/feat-013.md) |
 | feat-014 | At-Rest Queue Encryption | ✅ | Kevin Hardianto | feat-002 | SEC-08 | [archive](archive/features/feat-014.md) |
-| feat-015 | Optional Certificate Pinning (opt-in, P2) | 🟡 | — | feat-011, feat-010 | SEC-11 | — |
+| feat-015 | Optional Certificate Pinning (opt-in, P2) | ✅ | Kevin Hardianto | feat-011, feat-010 | SEC-11 | [archive](archive/features/feat-015.md) |
 | feat-016 | Composition Root (`APM.start`) | 🟡 | — | feat-014, feat-015 | MOB-25 (integration-time risk) | — |
-
-### feat-015 · Optional Certificate Pinning (opt-in, P2)
-
-- **Status:** 🟡 not started · **Depends on:** feat-011 (builds on the plain TLS floor),
-  feat-010 (`RemoteConfigStore` — the kill switch)
-- **Requirements (SEC-11, P2, per the 2026-08-29 docs/02 §6.3 decision):**
-  - **Off by default.** Enabling pinning is a **per-app integration choice made at SDK setup**
-    (a config value the host app passes in deliberately) — **not** a remote-config value.
-    Remote config is only for the kill switch *after* pinning has already been enabled by the
-    host, never for turning it on in the first place.
-  - **Backup pin + kill switch are mandatory together whenever pinning is enabled** — not
-    optional add-ons, not separable. Kill switch reuses `RemoteConfig.disabledFeatures`
-    (e.g. `["cert_pinning"]`) — feat-010's existing, currently-inert field — rather than a new
-    dedicated wire flag.
-  - **"Stop pinning" ≠ "stop verifying."** When the kill switch disables pinning, the
-    connection falls back to feat-011's plain TLS floor, **not** to an unverified connection —
-    SEC-12's fail-closed guarantee applies identically whether pinning is on, off by default,
-    or switched off remotely mid-flight. There is no state in which the SDK's own connection
-    is unverified.
-- **Done when:** pinning OFF (default) behaves identically to feat-011 alone — zero pinning
-  code path active. Pinning ON rejects a real wrong-certificate handshake and fails closed. A
-  simulated certificate rotation continues working via the backup pin without any switch flip.
-  Flipping the `disabledFeatures` kill switch off disables pinning specifically (connection
-  drops to the TLS floor, still verified) and back on re-enables it — proven the same way
-  feat-010 proved the master kill switch: one test, real pipeline/session types, not fakes.
 
 ### feat-016 · Composition Root (`APM.start`)
 
