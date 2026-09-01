@@ -20,7 +20,8 @@
    Parked below.
 2. Manual verification checklist in `FEATURES.md` has 10 items, mostly unchanged by this
    session — items 1–4, 8, 10 are `☐ not verified`; item 5 needs real-device profiling.
-3. **Not yet committed:** none — everything below is committed.
+3. **Not yet committed:** `README.md` (documents findings 2 and 3 for SDK consumers) — the
+   user's own call per `CONSTITUTION.md`'s "never auto-commit."
 
 ## Parked
 
@@ -49,9 +50,9 @@ true result on Simulator; device logic untouched. 3 new tests.
 type (docs/01 §4.7, docs/02 MOB-15b, user's spec decision): `CrashReportMapper` emits it only
 for the 5 resource-kill `termination_reason` values, drops `unexplained` entirely. 3 new tests.
 
-**Finding 3 — `logError` gains call-site capture (docs/01 §4.4, §6, docs/02 MOB-11b).** Not
-yet committed. Pilot data showed one error message repeated 8x with no way to tell which call
-site — the old fingerprint (domain+code+message) would've merged genuinely different bugs.
+**Finding 3 — `logError` gains call-site capture (docs/01 §4.4, §6, docs/02 MOB-11b).**
+Committed `5f44695`. Pilot data showed one error message repeated 8x with no way to tell which
+call site — the old fingerprint (domain+code+message) would've merged genuinely different bugs.
 
 | File | What | Why |
 |---|---|---|
@@ -60,5 +61,9 @@ site — the old fingerprint (domain+code+message) would've merged genuinely dif
 | `Tests/APMKitTests/Identity/ManualReporterTests.swift` | 3 new tests: `source_file` has no leading `/` and no `/Users/` (the `#file`-regression guard), `source_function`/`source_line` match the real call site, explicit params override the default | Proves the #fileID contract directly — this is the part that would silently regress if someone "fixed" it to `#file` |
 | `CONSTITUTION.md` | New dated decision: why `#fileID` not `#file`, why `source_line` is excluded from the (backend-owned) fingerprint, why defaults must be re-declared at every layer | Full reasoning alongside the rule |
 | `docs/01-Kontrak-Data-API.md`, `docs/02-Mobile-SDK.md` | User's own edits (§4.4 new attrs, §6 fingerprint change, MOB-11b) — pulled and implemented against | Authoritative spec |
+
+**README update — not yet committed.** Documented findings 2 and 3 for SDK consumers: new
+"Termination reporting" feature bullet, `logError` bullet + quick-start comment note the
+auto-captured call site, and a new privacy-notes bullet on `#fileID` vs `#file`.
 
 _Ground truth: run `git diff --stat` to confirm this table matches reality._

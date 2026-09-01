@@ -9,10 +9,16 @@ observability, write-local-first (every event hits disk before any network call)
   with automatic exclusion of the SDK's own upload traffic.
 - **Crash reporting** — wraps [KSCrash](https://github.com/kstenerud/KSCrash); captures crashes
   and reports them on the next launch.
+- **Termination reporting** — an OS-level kill your app could never catch live (memory
+  pressure, thermal, CPU, low battery) is reported as its own `termination` event, distinct
+  from `crash`. Ordinary terminations (Xcode Stop, a user swipe, a rebuild) are not reported at
+  all — the OS gives no signal to distinguish them from each other, so counting them would only
+  make crash-free rate falsely bad.
 - **Main-thread hang detection** — live detection of >2s main-thread blocks.
 - **Breadcrumbs** — automatic (app lifecycle, connectivity) and manual, attached to every crash
   and manual error report.
-- **Manual error reporting** (`logError`) and cold-start timing (`recordFirstFrame`).
+- **Manual error reporting** (`logError`) — auto-captures the call site (file/function/line),
+  no extra arguments needed — and cold-start timing (`recordFirstFrame`).
 - **Remote kill switch** — disable the SDK app-wide via remote config, no app release needed.
 - **At-rest encryption** — the on-disk event queue is AES-GCM encrypted, key in Keychain.
 - **Optional certificate pinning** — off by default; opt in per app with a mandatory backup pin
@@ -121,7 +127,7 @@ That's it — the SDK is fully operational. Everything else is optional:
 // Automatic network observability for your own API calls:
 let (session, _) = apm.instrumentedSession()
 
-// Manual error reporting:
+// Manual error reporting — file/function/line are captured automatically from this call site:
 apm.logError(someError, context: ["screen": "checkout"])
 
 // Identify the current user (sent raw; hashing happens server-side):
@@ -165,6 +171,9 @@ across a mid-upload process kill.
 - Request/response bodies are never captured.
 - Headers are filtered through an allowlist (`Content-Type`, `Content-Length`, `Accept`,
   `User-Agent`) — `Authorization`/`Cookie`/custom headers are never recorded.
+- `logError`'s auto-captured `source_file` uses Swift's `#fileID` (`Module/File.swift`), never
+  `#file` (an absolute build-machine path) — the latter would leak the developer's username and
+  local directory layout into the monitoring backend on every error event.
 - TLS 1.2+ is enforced on the SDK's own upload connection, independent of your app's ATS
   settings; any TLS validation failure fails closed (data stays queued, never sent over an
   unprotected connection).
