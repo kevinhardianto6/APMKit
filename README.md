@@ -55,6 +55,8 @@ One call, as early as possible during app launch, wires the entire pipeline — 
 queue, PII scrubbing, the remote kill switch, crash reporting, hang detection, an initial
 remote-config fetch, and background/connectivity-triggered sync:
 
+**SwiftUI:**
+
 ```swift
 import APMKit
 
@@ -76,6 +78,42 @@ struct YourApp: App {
     }
 }
 ```
+
+**UIKit (`AppDelegate`):** the call itself is identical — only where you hold the returned
+`APMInstance` differs, since there's no SwiftUI `App` struct to store it on. Keep it as a
+property on your `AppDelegate` (or a shared singleton, if other places in your codebase need
+it too):
+
+```swift
+import UIKit
+import APMKit
+
+@main
+class AppDelegate: UIResponder, UIApplicationDelegate {
+    var apm: APMInstance!
+
+    func application(
+        _ application: UIApplication,
+        didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
+    ) -> Bool {
+        apm = APM.start(configuration: .init(
+            ingestEndpoint: IngestEndpoint(
+                url: URL(string: "https://ingest.yourcompany.com/v1/ingest")!,
+                appKey: "your-app-key"
+            )
+        ))
+        return true
+    }
+}
+```
+
+If your project uses a separate `SceneDelegate` (the default multi-scene UIKit template),
+`AppDelegate` is still the right place for this call — `application(_:didFinishLaunchingWithOptions:)`
+runs once per process, before any `SceneDelegate` is created, which is exactly "as early as
+possible during app launch." Reach `apm` from elsewhere via
+`(UIApplication.shared.delegate as! AppDelegate).apm`, or thread it through your own dependency
+injection if you have one — `SceneDelegate`'s `scene(_:willConnectTo:options:)` fires after this
+and never needs its own `APM.start` call.
 
 That's it — the SDK is fully operational. Everything else is optional:
 
