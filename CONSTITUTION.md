@@ -200,3 +200,40 @@ values, and returns `nil` (dropped, not `crash`) for anything else, including `u
 string values KSCrash can actually produce. Real-device verification (an actual OOM/thermal/
 CPU/battery kill, not a fixture) is `FEATURES.md` manual checklist item 10 — same host-toolchain
 limit as every other crash-adjacent probe in this file.
+
+### 2026-09-01 · `logError` auto-captures call-site location via `#fileID`, never `#file` (docs/01 §4.4, docs/02 MOB-11b)
+
+Real-run finding: pilot data showed the same `"NSError · Produk tidak tersedia"` message 8
+times with no way to tell whether that was one unfixed bug or several unrelated call sites
+that happen to share a domain/code/message. The existing fingerprint (domain + code +
+normalized message) would merge them regardless.
+
+**Decision:** `logError` gains `source_file` / `source_function` / `source_line`, auto-filled
+from the call site via Swift default-parameter expressions (`#fileID` / `#function` / `#line`)
+— zero developer effort, zero runtime cost (compiler literals). **`#fileID`, never `#file`**:
+`#file` is the absolute build-machine path (e.g. `/Users/<name>/dev/proyek/Sources/…`), which
+would leak the developer's username and directory layout into the monitoring backend on every
+single error event. SEC-05's scrubbing patterns target phone numbers, emails, and JWTs — they
+would not catch an arbitrary filesystem path, so this isn't a gap scrubbing closes later; it
+has to be the right primitive from the start. `#fileID` gives the safe `Module/File.swift`
+short form. This is now written directly into docs/01 §4.4's table, not left as an
+implementation detail — the next person implementing this for Android (or a future iOS
+rewrite) needs the same warning without having to rediscover it.
+
+**Fingerprint (§6) also changed**, backend-side: `hash(domain + code + normalized message +
+source_file + source_function)`. `source_line` is **deliberately excluded** — if it were
+included, adding a single line above a call site would shift the line number and fingerprint,
+splitting one unfixed bug's history into two apparent issues. `source_file` + `source_function`
+are stable under ordinary edits and are exactly what's needed to separate genuinely different
+call sites that happen to share a domain/code/message; `source_line` is still sent and
+displayed, purely so a person can jump to the code, and is data developers should always
+sanity-check isn't stale on a large diff — it just doesn't participate in grouping.
+
+**Implementation:** the default parameters must be declared at *every* public entry point a
+host app can call directly (`ManualReporter.logError`, `APM.logError`, `APMInstance.logError`)
+and forwarded explicitly at each layer — a default-parameter expression evaluates at its own
+declaration's call site, so if an outer wrapper relied on an inner method's default instead of
+declaring and forwarding its own, the captured location would silently collapse to wherever
+inside the SDK the inner call happens to live, not the app's real call site. Backward
+compatible: existing callers (e.g. `VerificationApp`) that don't pass `file`/`function`/`line`
+now get them captured for free.

@@ -7,28 +7,27 @@
 
 ## Now
 
-- **Objective:** No epic in progress (Pre-Pilot Hardening shipped 2026-08-31). This session
-  closed out two ad hoc real-run pilot findings end-to-end, including a spec decision from the
-  user and its implementation. Not `FEATURES.md` epic work.
-- **Active feature:** none — both findings are done, verified, and committed.
+- **Objective:** No epic in progress (Pre-Pilot Hardening shipped 2026-08-31). This session is
+  three ad hoc real-run pilot findings, each: investigated, fixed/spec'd with the user, tested,
+  committed. Not `FEATURES.md` epic work.
+- **Active feature:** none — all three findings are done, verified, and committed.
 - **Status:** —
-- **Last verify:** `./verify.sh build`/`test`/`budget` → all PASS, 2026-09-01. 231 tests.
+- **Last verify:** `./verify.sh build`/`test` → all PASS, 2026-09-01. 234 tests.
 
 ## Next step
 
 1. **Real decision still pending, unrelated to this session:** Android-port scoping — see
-   Parked below. A conversation with the user, not something to start solo.
-2. Manual verification checklist in `FEATURES.md` now has 10 items — items 1–4, 8, and the new
-   item 10 (`termination` event, real OOM/thermal/CPU/battery kill) are `☐ not verified`; item
-   5 needs real-device (not Simulator) profiling. Unchanged priority, just more items.
-3. Nothing else in flight.
+   Parked below.
+2. Manual verification checklist in `FEATURES.md` has 10 items, mostly unchanged by this
+   session — items 1–4, 8, 10 are `☐ not verified`; item 5 needs real-device profiling.
+3. **Not yet committed:** none — everything below is committed.
 
 ## Parked
 
 - **Android port** — unblocked since Pre-Pilot Hardening closed, not yet scoped. Parity notes:
-  `archive/epics/phase-1-2-wrap-up.md`. Note for whenever it's picked up: the `termination`
-  event type (added this session) was deliberately designed with Android's
-  `ApplicationExitInfo` parity in mind — see `CONSTITUTION.md`'s 2026-09-01 decision.
+  `archive/epics/phase-1-2-wrap-up.md`. The `termination` event type and the `logError`
+  call-site fields were both designed with Android parity in mind (`ApplicationExitInfo`,
+  stack-frame file/function/line) — see `CONSTITUTION.md`'s 2026-09-01 decisions.
 
 ## In flight elsewhere
 
@@ -40,26 +39,26 @@
 
 ## Changes (this session)
 
-Previous session: `archive/sessions/2026-08-31-feat-015-016-epic-shipped.md` (feat-015,
-feat-016, epic rotation).
+Previous session: `archive/sessions/2026-08-31-feat-015-016-epic-shipped.md`.
 
 **Finding 1 — MOB-30 Simulator `is_rooted` false positive.** Committed `dee3b17`.
-`JailbreakVerdict.sandboxWriteSignal(isSimulator:rawWriteSucceeded:)` discards the
-sandbox-write probe's raw result on Simulator (structurally always succeeds there, unsandboxed
-process) and passes it through unchanged on device. 3 new tests in `IntegrityVerdictsTests`.
+`JailbreakVerdict.sandboxWriteSignal` discards the sandbox-write probe's structurally-always-
+true result on Simulator; device logic untouched. 3 new tests.
 
-**Finding 2 — SIGKILL/termination reports mis-mapped as `crash`, now a dedicated event type.**
-User approved the root cause, then made and pushed a spec decision (docs/01 §4.6/§4.7, docs/02
-MOB-15b: new `termination` event type, `termination_reason` enum of 5 resource-kill causes,
-`unexplained` dropped entirely). Implemented against the updated spec — committed alongside
-this session's other changes.
+**Finding 2 — SIGKILL mis-mapped as `crash`.** Committed `074a8f5`. New `termination` event
+type (docs/01 §4.7, docs/02 MOB-15b, user's spec decision): `CrashReportMapper` emits it only
+for the 5 resource-kill `termination_reason` values, drops `unexplained` entirely. 3 new tests.
+
+**Finding 3 — `logError` gains call-site capture (docs/01 §4.4, §6, docs/02 MOB-11b).** Not
+yet committed. Pilot data showed one error message repeated 8x with no way to tell which call
+site — the old fingerprint (domain+code+message) would've merged genuinely different bugs.
 
 | File | What | Why |
 |---|---|---|
-| `Sources/APMKit/Crash/CrashReportMapper.swift` | `errorType == "termination"` now routes to new `makeTerminationEvent`, which emits `type: "termination"` (attrs `termination_reason`, `time_since_launch_ms`) when `error["termination_reason"]` is one of `memory_limit`/`memory_pressure`/`cpu`/`thermal`/`low_battery`, else returns `nil` (drops `unexplained` and anything else). Extracted shared `timeSinceLaunchMs`/`appState` helpers used by both `crash` and `termination` paths. | Implements docs/01 §4.7 / docs/02 MOB-15b exactly as specified |
-| `Tests/APMKitTests/Crash/CrashReportMapperTests.swift` | Replaced the old "always nil" termination test with 3: the 5 resource reasons → `termination` event with correct attrs; `unexplained` + 8 other real `KSTerminationReason` strings → `nil`; missing `termination_reason` → `nil` | Proves both branches of the new spec, parametrized over every value KSCrash can actually produce |
-| `CONSTITUTION.md` | New dated decision recording the landed spec decision and its reasoning (parity, retrospective-discovery, actionability) | Keeps the "why" alongside the "what," per this file's own rule |
-| `FEATURES.md` | Removed the now-resolved "Pending spec decisions" table; added manual-checklist item 10 (real OOM/thermal/CPU/battery kill → `termination` event, unverifiable by `swift test`) | Tracks the one thing about this feature that still needs a real device/Simulator run |
-| `docs/01-Kontrak-Data-API.md`, `docs/02-Mobile-SDK.md` | User's own edits (§4.6 clarification, new §4.7, MOB-15b) — not authored this session, pulled and implemented against | Authoritative spec, per `AGENTS.md`/`CONSTITUTION.md` |
+| `Sources/APMKit/Identity/ManualReporter.swift` | `logError` gains `file: String = #fileID, function: String = #function, line: Int = #line` params; emits `source_file`/`source_function`/`source_line` attrs | Auto-captures the call site, zero dev effort/runtime cost. **Must stay `#fileID`, never `#file`** — `#file` is the absolute build path, leaks the dev's username; SEC-05's scrub patterns (phone/email/JWT) wouldn't catch it |
+| `Sources/APMKit/APMKit.swift` (`APM.logError`), `Sources/APMKit/Composition/APMInstance.swift` (`APMInstance.logError`) | Both gain the same 3 default params, declared on *their own* signature and forwarded explicitly | Default-param expressions evaluate at their own call site — a wrapper relying on the inner method's default instead of declaring+forwarding its own would capture the SDK's file, not the app's |
+| `Tests/APMKitTests/Identity/ManualReporterTests.swift` | 3 new tests: `source_file` has no leading `/` and no `/Users/` (the `#file`-regression guard), `source_function`/`source_line` match the real call site, explicit params override the default | Proves the #fileID contract directly — this is the part that would silently regress if someone "fixed" it to `#file` |
+| `CONSTITUTION.md` | New dated decision: why `#fileID` not `#file`, why `source_line` is excluded from the (backend-owned) fingerprint, why defaults must be re-declared at every layer | Full reasoning alongside the rule |
+| `docs/01-Kontrak-Data-API.md`, `docs/02-Mobile-SDK.md` | User's own edits (§4.4 new attrs, §6 fingerprint change, MOB-11b) — pulled and implemented against | Authoritative spec |
 
 _Ground truth: run `git diff --stat` to confirm this table matches reality._

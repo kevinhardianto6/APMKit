@@ -13,6 +13,11 @@ struct ManualReporterTests {
         return nil
     }
 
+    private func int(_ event: Event, _ key: String) -> Int? {
+        if case .int(let value)? = event.attrs[key] { return value }
+        return nil
+    }
+
     @Test("logError produces an error event with handled always true")
     func logErrorProducesErrorEvent() {
         let sink = CollectingEventSink()
@@ -90,5 +95,48 @@ struct ManualReporterTests {
         let json = try #require(string(sink.events[0], "breadcrumbs"))
         let decoded = try JSONDecoder().decode([Breadcrumb].self, from: Data(json.utf8))
         #expect(decoded.isEmpty)
+    }
+
+    // MARK: - Call-site capture (docs/01 §4.4, docs/02 MOB-11b)
+
+    @Test("logError auto-captures source_file using the #fileID short form — no leading slash, no /Users/ segment. This is the regression #file would silently reintroduce (SEC-05b: #file leaks the build machine's username and directory layout, and SEC-05's phone/email/JWT scrubbing patterns would not catch it)")
+    func sourceFileUsesFileIDShortFormNotAbsolutePath() throws {
+        let sink = CollectingEventSink()
+        let reporter = ManualReporter(sink: sink, sessionManager: SessionManager())
+
+        reporter.logError(SampleError())
+
+        let sourceFile = try #require(string(sink.events[0], "source_file"))
+        #expect(!sourceFile.hasPrefix("/"))
+        #expect(!sourceFile.contains("/Users/"))
+        // #fileID's own documented shape: "Module/File.swift".
+        #expect(sourceFile.hasSuffix(".swift"))
+        #expect(sourceFile.contains("/"))
+    }
+
+    @Test("logError auto-captures source_function and source_line at the actual call site, with no developer input")
+    func sourceFunctionAndLineAreCaptured() {
+        let sink = CollectingEventSink()
+        let reporter = ManualReporter(sink: sink, sessionManager: SessionManager())
+
+        let expectedLine = #line + 1
+        reporter.logError(SampleError())
+
+        let event = sink.events[0]
+        #expect(string(event, "source_function") == #function)
+        #expect(int(event, "source_line") == expectedLine)
+    }
+
+    @Test("an explicit file/function/line (as a wrapper forwarding its own call site would pass) overrides the default capture")
+    func explicitSourceLocationOverridesDefault() {
+        let sink = CollectingEventSink()
+        let reporter = ManualReporter(sink: sink, sessionManager: SessionManager())
+
+        reporter.logError(SampleError(), file: "Module/Forwarded.swift", function: "forwardedFunction()", line: 42)
+
+        let event = sink.events[0]
+        #expect(string(event, "source_file") == "Module/Forwarded.swift")
+        #expect(string(event, "source_function") == "forwardedFunction()")
+        #expect(int(event, "source_line") == 42)
     }
 }

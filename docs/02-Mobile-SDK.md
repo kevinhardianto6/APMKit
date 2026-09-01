@@ -90,6 +90,7 @@ SDK yang di-embed ke aplikasi iOS & Android, bertugas menangkap event, menyimpan
 | ID | Requirement | Prio |
 |---|---|---|
 | MOB-11 | API publik: `logError(error, context)` dan `breadcrumb(message, category)` | P0 |
+| MOB-11b | `logError` mengisi `source_file` / `source_function` / `source_line` secara otomatis dari lokasi pemanggilan (default parameter `#fileID` / `#function` / `#line` di iOS). **Wajib `#fileID`, bukan `#file`** — `#file` membocorkan path mesin build beserta nama pengguna. Developer tidak perlu mengisi apa pun. | P0 |
 | MOB-12 | Breadcrumb otomatis untuk **lifecycle app** dan **perubahan konektivitas** (benar-benar otomatis, tanpa aksi app host). Untuk **perpindahan screen**: di iOS bersifat *host-invoked* — SDK menyediakan primitive `recordScreen(_:)` plus helper opt-in (base class UIViewController & view modifier SwiftUI), **tanpa method swizzling**. Di Android perpindahan screen bisa otomatis via `ActivityLifecycleCallbacks`. | P0 |
 | MOB-13 | Ring buffer breadcrumb: 100 entri terakhir, dilampirkan ke setiap crash/error | P0 |
 | MOB-26 | Mode debug: log lokal berisi event yang tertangkap, non-aktif di build release | P1 |

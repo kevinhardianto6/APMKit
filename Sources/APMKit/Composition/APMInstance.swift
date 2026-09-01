@@ -57,9 +57,18 @@ public final class APMInstance {
     }
 
     /// Forwards to `APM.logError` with this instance's `sink`/`sessionManager` already filled
-    /// in.
-    public func logError(_ error: Error, context: [String: String] = [:]) {
-        APM.logError(error, context: context, sink: sink, sessionManager: sessionManager)
+    /// in. `file`/`function`/`line` (docs/02 MOB-11b) default to `#fileID`/`#function`/`#line`
+    /// evaluated at the app's actual call site — this is the entry point most hosts call, so
+    /// forwarding these explicitly (rather than letting `APM.logError`'s own defaults fire) is
+    /// what keeps `source_file` pointing at the app, not at this file.
+    public func logError(
+        _ error: Error,
+        context: [String: String] = [:],
+        file: String = #fileID,
+        function: String = #function,
+        line: Int = #line
+    ) {
+        APM.logError(error, context: context, sink: sink, sessionManager: sessionManager, file: file, function: function, line: line)
     }
 
     /// Forwards to `APM.recordFirstFrame` with this instance's `sink`/`sessionManager` already

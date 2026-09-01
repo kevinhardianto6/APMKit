@@ -27,7 +27,23 @@ public final class ManualReporter {
 
     /// Reports a handled error (docs/01 §4.4: `handled` is always `true` for this path —
     /// unhandled crashes are feat-009's domain, wrapping KSCrash).
-    public func logError(_ error: Error, context: [String: String] = [:]) {
+    ///
+    /// `file`/`function`/`line` (docs/01 §4.4, docs/02 MOB-11b) default to `#fileID`/
+    /// `#function`/`#line` **evaluated at this call**, not forwarded from further up the
+    /// stack — callers that wrap this (`APM.logError`, `APMInstance.logError`) must declare
+    /// the same three defaults themselves and pass them through explicitly, or the captured
+    /// location collapses to the wrapper's own file instead of the real call site. **Must stay
+    /// `#fileID`, never `#file`**: `#file` is the absolute build-machine path (leaks the
+    /// developer's username and directory layout into the monitoring backend); SEC-05's
+    /// scrubbing patterns target phone numbers/emails/JWTs and would not catch this. `#fileID`
+    /// gives the safe `Module/File.swift` short form.
+    public func logError(
+        _ error: Error,
+        context: [String: String] = [:],
+        file: String = #fileID,
+        function: String = #function,
+        line: Int = #line
+    ) {
         let nsError = error as NSError
 
         var attrs: [String: AttributeValue] = [
@@ -36,6 +52,9 @@ public final class ManualReporter {
             "domain": .string(nsError.domain),
             "code": .int(nsError.code),
             "handled": .bool(true),
+            "source_file": .string(file),
+            "source_function": .string(function),
+            "source_line": .int(line),
             "breadcrumbs": .string(breadcrumbsJSON())
         ]
 

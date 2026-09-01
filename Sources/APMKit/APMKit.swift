@@ -61,13 +61,22 @@ public enum APM {
     /// takes an explicit `sink`/`sessionManager` for now, matching `instrumentedSession()`'s
     /// dependency style; there is no composition root yet to hold that state for a
     /// zero-argument call (feat-006/010 territory once one exists).
+    ///
+    /// `file`/`function`/`line` (docs/02 MOB-11b) default to `#fileID`/`#function`/`#line`
+    /// evaluated **here**, at this call — this is a real caller of `logError`, not a passthrough,
+    /// so the defaults must be declared on this signature too and forwarded explicitly; letting
+    /// `ManualReporter.logError`'s own defaults fire instead would capture this file
+    /// (`APMKit.swift`) rather than the app's actual call site.
     public static func logError(
         _ error: Error,
         context: [String: String] = [:],
         sink: EventSink,
-        sessionManager: SessionManager
+        sessionManager: SessionManager,
+        file: String = #fileID,
+        function: String = #function,
+        line: Int = #line
     ) {
-        ManualReporter(sink: sink, sessionManager: sessionManager).logError(error, context: context)
+        ManualReporter(sink: sink, sessionManager: sessionManager).logError(error, context: context, file: file, function: function, line: line)
     }
 
     /// Records a breadcrumb (docs/01 §4.5, docs/02 §3.4 MOB-11/12/13) — a small chronological

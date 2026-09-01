@@ -143,7 +143,14 @@ Konsekuensinya: input mentah yang sama (mis. nomor telepon yang sama) selalu men
 | `name`, `message` | Deskripsi error |
 | `domain`, `code` | Untuk NSError/Exception |
 | `handled` | Selalu `true` |
+| `source_file` | Berkas asal pemanggilan, terisi otomatis. **iOS: `#fileID`, bukan `#file`.** Android: nama berkas dari stack frame pemanggil. |
+| `source_function` | Nama fungsi pemanggil, terisi otomatis (`#function` di iOS) |
+| `source_line` | Nomor baris pemanggil, terisi otomatis (`#line` di iOS). **Tampilan saja — tidak masuk fingerprint.** |
 | `custom.*` | Key kustom dari developer. Maks 20 key, masing-masing ≤ 256 karakter. |
+
+> **Wajib `#fileID`, bukan `#file`.** `#file` menghasilkan path lengkap dari mesin build — mis. `/Users/<nama>/dev/proyek/Sources/…` — yang membocorkan nama pengguna dan struktur direktori mesin build ke storage monitoring. Pola scrubbing SEC-05 mencari nomor telepon/email/JWT, **tidak** akan menangkap ini. `#fileID` menghasilkan bentuk pendek `Modul/Berkas.swift` yang aman.
+>
+> Ketiga atribut ini terisi oleh compiler di lokasi pemanggilan, tanpa biaya runtime dan tanpa developer perlu mengingat apa pun.
 
 ### 4.5 `breadcrumb`
 
@@ -211,7 +218,10 @@ Backend mengelompokkan event menjadi **Issue**. Website menampilkan Issue, bukan
 |---|---|
 | `crash` | Hash dari (tipe exception + N frame teratas non-sistem yang sudah dinormalisasi) |
 | `network_failure` | Hash dari (host + `failure_category` + `status_code`) |
-| `error` | Hash dari (domain + code + message yang dinormalisasi: angka & UUID diganti placeholder) |
+| `error` | Hash dari (domain + code + message yang dinormalisasi + `source_file` + `source_function`). **`source_line` sengaja TIDAK ikut** — lihat catatan di bawah. |
+| `termination` | Hash dari (`termination_reason` + versi app) |
+
+> **Kenapa `source_line` dikecualikan.** Menambah satu baris di atas lokasi pemanggilan akan menggeser nomor barisnya. Jika `source_line` ikut fingerprint, issue lama tampak "hilang" dan muncul issue baru yang identik — padahal bug-nya sama dan tidak ada yang diperbaiki. `source_file` + `source_function` cukup stabil terhadap penyuntingan biasa, sekaligus memisahkan dua error berbeda yang kebetulan punya domain, code, dan pesan serupa. `source_line` tetap dikirim dan ditampilkan untuk melompat ke kode.
 
 > **Aturan ini milik Backend, tapi Frontend bergantung padanya.** Mengubah aturan mengubah pengelompokan data historis — perubahan wajib dikomunikasikan dan diberi versi.
 >
