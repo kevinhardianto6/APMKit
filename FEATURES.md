@@ -32,12 +32,13 @@ and feat-009's Blockers; consolidated here 2026-08-28 so it's one list, not seve
 | 7 | A real >2s main-thread block detected live by KSCrash's `Watchdog` monitor + `HangDetector`, without the detector itself blocking or hanging (MOB-18's actual "Done when"). | feat-010 | ☑ verified 2026-08-29 — `IOSCrashHarnessTests.phase3_hangDetection`, same Simulator/invocation pattern as item 6. |
 | 8 | The `.github/workflows/ci.yml` GitHub Actions workflow (feat-012) actually fires and gates a real PR — unverified in this environment because this repo has no git remote configured here. Its YAML is syntax-valid and it runs the same `./verify.sh all` already verified to pass locally. | feat-012 | ☐ not verified |
 | 9 | True cross-app-relaunch Keychain persistence for SEC-08's encryption key (does the queue encrypted by one app launch still decrypt after the app is quit and relaunched — not via `xcodebuild test`, which resets Keychain state between invocations regardless of app identity). | feat-014 | ☑ verified 2026-08-31 (feat-016) — `VerificationApp` installed via `simctl`, launched, 2 real encrypted events written and read back; `simctl terminate` (confirmed via `launchctl list`) then `simctl launch` again as a genuinely new process (PID changed); second process's independent `FileDiskQueue` read-back decoded all 5 accumulated events using the Keychain-persisted key. Required fixing the verification app's code signing (`CODE_SIGNING_ALLOWED = NO` → ad-hoc `"-"`) — an unsigned app's Keychain round-trip was unreliable; see `archive/features/feat-016.md`. |
+| 10 | A real OS-triggered termination (OOM/thermal/CPU/battery kill, not a simulated fixture) actually surfacing as KSCrash's Termination-monitor report on next launch, with `termination_reason` carrying one of the five resource enum values, and correctly mapped to a `termination` event (docs/01 §4.7, docs/02 MOB-15b, added 2026-09-01) rather than `crash`. `CrashReportMapperTests` proves the mapping logic against fixture dictionaries only — no automated test can force a real memory/thermal/CPU/battery-critical kill. | MOB-15b, 2026-09-01 real-run finding | ☐ not verified |
 
 Items 1–4 (feat-002/007/008, Phase 1) remain unverified as of 2026-08-31 — feat-009/010 added
 their own device-only checks (6, 7) but did not re-visit these; feat-012 narrowed item 5's scope,
 feat-016 unblocked it (Simulator numbers recorded) but real-device profiling is still needed.
-feat-016 also verified item 9 for real via `VerificationApp`. Still the running punch list before
-the pilot ships.
+feat-016 also verified item 9 for real via `VerificationApp`. Item 10 added 2026-09-01 alongside
+the `termination` event type. Still the running punch list before the pilot ships.
 
 ## Shipped
 

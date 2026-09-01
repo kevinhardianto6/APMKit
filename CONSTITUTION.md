@@ -141,3 +141,62 @@ filesystem doesn't carry jailbreak tooling paths and a hit there would still be 
 not a structural false positive — though that reasoning rests on how Simulator's filesystem
 happens to be laid out today, not a platform guarantee, so it stays on the manual verification
 checklist (`FEATURES.md` item 1) rather than being treated as proven.
+
+### 2026-09-01 · SIGKILL/termination reports dropped from `crash`, pending a spec decision
+
+Pilot ingestion server's real traffic showed a `crash` event with `time_since_launch_ms: 581`
+and an empty `reason` — traced to KSCrash's `Termination` monitor, which injects a synthetic
+report (a fake `signal: SIGKILL` block "for backward compatibility") for OS-level kills that
+can never be caught live: an Xcode Stop-button kill, the user swiping the app away, a rebuild,
+or the system reclaiming memory. `CrashReportMapper` was mapping these to `crash_type: signal`
+— not a crash by any real definition (nothing in app code caused or could catch it, and there
+is no stack to symbolicate), and inflating crash counts, since nearly every dev session ends
+this way. Sentry/Crashlytics both exclude SIGKILL from crash counts for the same reason.
+
+**Investigated whether the cause is distinguishable** (can we tell an ordinary termination
+from a real system-resource kill?): yes, partially. KSCrash's own `RunContext` classifies the
+previous run's death into a `termination_reason` *before* the Termination monitor ever fires —
+`memory_limit` / `memory_pressure` / `cpu` / `thermal` / `low_battery` are set only when that
+specific critical resource state was actually observed in the last snapshot before death (a
+real, evidence-based signal, not a guess); everything else — Xcode Stop, user swipe, rebuild,
+plain `kill -9` — collapses into `unexplained`, because the OS genuinely gives no further
+signal to KSCrash once a SIGKILL happens. So: system-resource kills are reliably
+distinguishable from ordinary terminations; ordinary terminations are *not* further
+distinguishable from each other, and `unexplained` should read as exactly that — "termination,
+cause unknown" — not a guess dressed up as a diagnosis.
+
+**Decision:** drop these reports from the `crash` pipeline now (`CrashReportMapper` returns
+`nil` for `errorType == "termination"`) — this is a correctness fix that needs no schema
+change, since it only stops a misclassification. Did **not** implement the richer "keep but
+relabel" option (a new event type/attribute carrying `termination_reason`) — docs/01 §4.3
+(`crash`) and §4.6 (`lifecycle`) have no field for it, and inventing wire schema the backend
+doesn't know about isn't this SDK's call to make unilaterally. **Flagged as an open spec
+question for the PRD owner:** should this become a new event type (e.g. `termination`, with
+`termination_reason` and `is_fatal` attributes), or ride on the existing `lifecycle` type's
+`terminate` state (§4.6) with an added attribute? Once docs/01 answers that, wiring the
+emission is a small, well-scoped follow-up — the classification logic above is already worked
+out, just not implemented against a type that doesn't exist yet.
+
+### 2026-09-01 · Spec decision landed: `termination` is a new event type (docs/01 §4.7, MOB-15b)
+
+Supersedes the open question in the previous entry. The PRD owner decided: `termination` gets
+its own event type rather than riding on `lifecycle`'s `state: terminate` (§4.6), because (1)
+it's discovered retrospectively at next launch — crash-like, not lifecycle-like; (2) Android's
+`ApplicationExitInfo` produces the same shape, so a first-class type is the parity-favoring
+choice for the eventual Android port; (3) OOM/thermal/CPU/battery kills are genuinely
+actionable and shouldn't be buried among ordinary lifecycle terminations; (4) adding a type is
+cheapest now, before a backend consumer exists to migrate.
+
+Schema: `termination_reason` (enum `memory_limit | memory_pressure | cpu | thermal |
+low_battery`, required) + optional `time_since_launch_ms`. `unexplained` is dropped entirely,
+not just relabeled — the OS gives nothing after SIGKILL, so it's indistinguishable from an
+ordinary user/dev termination and is high-volume, zero-diagnostic-value noise. If a real signal
+is later found there, adding it back is cheap (it's an additive enum case).
+
+Implemented in `CrashReportMapper.makeTerminationEvent` — `errorType == "termination"` now
+routes to a `termination` event when `error["termination_reason"]` is one of the five enum
+values, and returns `nil` (dropped, not `crash`) for anything else, including `unexplained`.
+`CrashReportMapperTests` covers both branches, parametrized over all nine `KSTerminationReason`
+string values KSCrash can actually produce. Real-device verification (an actual OOM/thermal/
+CPU/battery kill, not a fixture) is `FEATURES.md` manual checklist item 10 — same host-toolchain
+limit as every other crash-adjacent probe in this file.

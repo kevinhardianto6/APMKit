@@ -106,6 +106,7 @@ SDK yang di-embed ke aplikasi iOS & Android, bertugas menangkap event, menyimpan
 | ID | Requirement | Prio |
 |---|---|---|
 | MOB-15 | Menangkap uncaught exception dan sinyal native | P0 |
+| MOB-15b | Proses yang mati tanpa crash **tidak boleh** dilaporkan sebagai `crash`. Emit sebagai event `termination` (`01` §4.7) **hanya** bila penyebabnya termasuk enum sumber daya kritis; terminasi `unexplained` dibuang. Library crash (KSCrash) menyuntikkan laporan sintetis berlabel SIGKILL untuk kasus ini — label itu harus diabaikan, bukan diteruskan. | P0 |
 | MOB-16 | Crash report ditulis ke disk saat crash, dikirim pada peluncuran berikutnya | P0 |
 | MOB-17 | Menyertakan `binary_images` + UUID untuk symbolication | P0 |
 | MOB-18 | Deteksi ANR (Android) / hang main thread > 2 detik (iOS) | P1 |

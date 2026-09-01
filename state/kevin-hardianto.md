@@ -7,41 +7,28 @@
 
 ## Now
 
-- **Objective:** Bug fix (real-run pilot finding, not a `FEATURES.md` epic item): clean
-  Simulator sessions report `integrity.is_rooted = true` (false positive). Root cause: the
-  sandbox-write probe in `DeviceIntegrityDetector.isRooted()` (MOB-30) structurally always
-  succeeds on Simulator (unsandboxed macOS process), and that `true` was feeding straight into
-  `JailbreakVerdict.isRooted`'s OR-combination.
-- **Active feature:** MOB-30 Simulator false-positive fix (ad hoc, reported by user this
-  session from the pilot ingestion server's real traffic).
-- **Status:** ✅ fixed and verified this session. `is_rooted` end-to-end on a real Simulator is
-  still on the manual checklist (`FEATURES.md` item 1) — the fix's *logic* is unit-tested, its
-  live Simulator behavior is not (same host-toolchain limit as everything else in item 1).
-- **Last verify:** `./verify.sh build`/`test`/`budget` → all PASS, 2026-09-01. 228 tests (was
-  225 — added 3 for `JailbreakVerdict.sandboxWriteSignal`).
+- **Objective:** No epic in progress (Pre-Pilot Hardening shipped 2026-08-31). This session
+  closed out two ad hoc real-run pilot findings end-to-end, including a spec decision from the
+  user and its implementation. Not `FEATURES.md` epic work.
+- **Active feature:** none — both findings are done, verified, and committed.
+- **Status:** —
+- **Last verify:** `./verify.sh build`/`test`/`budget` → all PASS, 2026-09-01. 231 tests.
 
 ## Next step
 
-Epic closed — full detail `archive/epics/pre-pilot-hardening.md`, this session's own account
-`archive/sessions/2026-08-31-feat-015-016-epic-shipped.md`. **Nothing is currently scoped as a
-ready (🟡) feature in `FEATURES.md`.**
-
-The next real decision (per `AGENTS.md`'s own sequencing, `CONSTITUTION.md`, and this epic's
-own note): **Android port** is now unblocked but not yet scoped into `FEATURES.md` — parity
-notes are ready at `archive/epics/phase-1-2-wrap-up.md` → "What an Android port would need for
-parity," but scoping it into epics/features is a decision to make *with* the user next session,
-not something to assume and start solo.
-
-Also still open, not part of any active epic: manual verification checklist items 1–4 and 8 in
-`FEATURES.md` (Phase 1 device/Simulator checks that were never revisited), and item 5's
-real-device cold-start profiling (feat-016 got Simulator numbers, not the real thing).
-
-**feat-016's changes are staged but not committed** — commit is a separate step per
-`CONSTITUTION.md`'s "never auto-commit."
+1. **Real decision still pending, unrelated to this session:** Android-port scoping — see
+   Parked below. A conversation with the user, not something to start solo.
+2. Manual verification checklist in `FEATURES.md` now has 10 items — items 1–4, 8, and the new
+   item 10 (`termination` event, real OOM/thermal/CPU/battery kill) are `☐ not verified`; item
+   5 needs real-device (not Simulator) profiling. Unchanged priority, just more items.
+3. Nothing else in flight.
 
 ## Parked
 
-- **Android port** — unblocked as of this epic's close, not yet scoped. See above.
+- **Android port** — unblocked since Pre-Pilot Hardening closed, not yet scoped. Parity notes:
+  `archive/epics/phase-1-2-wrap-up.md`. Note for whenever it's picked up: the `termination`
+  event type (added this session) was deliberately designed with Android's
+  `ApplicationExitInfo` parity in mind — see `CONSTITUTION.md`'s 2026-09-01 decision.
 
 ## In flight elsewhere
 
@@ -53,25 +40,26 @@ real-device cold-start profiling (feat-016 got Simulator numbers, not the real t
 
 ## Changes (this session)
 
-Previous session's table: `archive/sessions/2026-08-31-feat-015-016-epic-shipped.md` (feat-015,
+Previous session: `archive/sessions/2026-08-31-feat-015-016-epic-shipped.md` (feat-015,
 feat-016, epic rotation).
 
-This session — MOB-30 Simulator `is_rooted` false-positive fix:
+**Finding 1 — MOB-30 Simulator `is_rooted` false positive.** Committed `dee3b17`.
+`JailbreakVerdict.sandboxWriteSignal(isSimulator:rawWriteSucceeded:)` discards the
+sandbox-write probe's raw result on Simulator (structurally always succeeds there, unsandboxed
+process) and passes it through unchanged on device. 3 new tests in `IntegrityVerdictsTests`.
+
+**Finding 2 — SIGKILL/termination reports mis-mapped as `crash`, now a dedicated event type.**
+User approved the root cause, then made and pushed a spec decision (docs/01 §4.6/§4.7, docs/02
+MOB-15b: new `termination` event type, `termination_reason` enum of 5 resource-kill causes,
+`unexplained` dropped entirely). Implemented against the updated spec — committed alongside
+this session's other changes.
 
 | File | What | Why |
 |---|---|---|
-| `Sources/APMKit/Integrity/IntegrityVerdicts.swift` | Added `JailbreakVerdict.sandboxWriteSignal(isSimulator:rawWriteSucceeded:)` | Pure, host-testable mapping that discards the sandbox-write probe's raw result on Simulator (structurally always succeeds there) and passes it through unchanged on device |
-| `Sources/APMKit/Integrity/DeviceIntegrityDetector.swift` | `isRooted()` now routes `canWriteOutsideSandbox()`'s result through `sandboxWriteSignal`; expanded the file-header doc comment with the 2026-09-01 finding and its honesty caveats | Fixes the false positive without touching real-device combination logic; documents what is/isn't proven, same as feat-008's existing honesty note |
-| `Tests/APMKitTests/Integrity/IntegrityVerdictsTests.swift` | Added 3 tests: Simulator discards raw `true`/`false`, device passes through unchanged, end-to-end clean-Simulator combination is `false` | Proves the fix's logic on the macOS host (the live Simulator probe itself still needs a real run — see below) |
-| `FEATURES.md` | Updated manual-checklist item 1 with a 2026-09-01 note | Keeps the one running pre-ship checklist current rather than scattering a new row |
-| `CONSTITUTION.md` | Added a dated decision entry | Records the two options considered (skip probe vs. weaken combination logic) and why (b) was chosen, plus why file/symlink probes were left alone |
+| `Sources/APMKit/Crash/CrashReportMapper.swift` | `errorType == "termination"` now routes to new `makeTerminationEvent`, which emits `type: "termination"` (attrs `termination_reason`, `time_since_launch_ms`) when `error["termination_reason"]` is one of `memory_limit`/`memory_pressure`/`cpu`/`thermal`/`low_battery`, else returns `nil` (drops `unexplained` and anything else). Extracted shared `timeSinceLaunchMs`/`appState` helpers used by both `crash` and `termination` paths. | Implements docs/01 §4.7 / docs/02 MOB-15b exactly as specified |
+| `Tests/APMKitTests/Crash/CrashReportMapperTests.swift` | Replaced the old "always nil" termination test with 3: the 5 resource reasons → `termination` event with correct attrs; `unexplained` + 8 other real `KSTerminationReason` strings → `nil`; missing `termination_reason` → `nil` | Proves both branches of the new spec, parametrized over every value KSCrash can actually produce |
+| `CONSTITUTION.md` | New dated decision recording the landed spec decision and its reasoning (parity, retrospective-discovery, actionability) | Keeps the "why" alongside the "what," per this file's own rule |
+| `FEATURES.md` | Removed the now-resolved "Pending spec decisions" table; added manual-checklist item 10 (real OOM/thermal/CPU/battery kill → `termination` event, unverifiable by `swift test`) | Tracks the one thing about this feature that still needs a real device/Simulator run |
+| `docs/01-Kontrak-Data-API.md`, `docs/02-Mobile-SDK.md` | User's own edits (§4.6 clarification, new §4.7, MOB-15b) — not authored this session, pulled and implemented against | Authoritative spec, per `AGENTS.md`/`CONSTITUTION.md` |
 
 _Ground truth: run `git diff --stat` to confirm this table matches reality._
-
-## Next step (superseding "Epic closed" above for the immediate next session)
-
-MOB-30 fix is done and verified (build/test/budget all PASS, 228 tests) but **not committed**
-— per `CONSTITUTION.md`'s "never auto-commit," commit is the user's call. Suggested message:
-`fix: MOB-30 Simulator is_rooted false positive (sandbox-write probe)`. After that, the actual
-next decision is still the Android-port scoping conversation noted below — this was an
-interrupt, not a new epic.

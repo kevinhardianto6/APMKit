@@ -160,6 +160,27 @@ Konsekuensinya: input mentah yang sama (mis. nomor telepon yang sama) selalu men
 | `state` | `cold_start` \| `warm_start` \| `foreground` \| `background` \| `terminate` |
 | `duration_ms` | Untuk cold start: waktu sampai frame pertama |
 
+> `state: terminate` berarti aplikasi ditutup secara normal dan teramati **saat itu juga**. Proses yang mati mendadak tanpa sempat melapor adalah hal berbeda — lihat §4.7.
+
+### 4.7 `termination` — proses mati tanpa crash
+
+Ditemukan **retrospektif saat peluncuran berikutnya**: proses sebelumnya mati tanpa sempat menulis penanda penutupan normal, dan bukan karena crash. Sifatnya seperti crash report (dilaporkan belakangan), bukan seperti lifecycle (dilaporkan langsung).
+
+| Atribut | Tipe | Wajib |
+|---|---|---|
+| `termination_reason` | enum: `memory_limit` \| `memory_pressure` \| `cpu` \| `thermal` \| `low_battery` | ✓ |
+| `time_since_launch_ms` | int | — |
+
+**Aturan emit:** SDK **hanya** mengirim event ini bila penyebabnya termasuk enum di atas — yakni kondisi sumber daya kritis yang benar-benar teramati sebelum proses mati. Terminasi yang penyebabnya tidak diketahui OS (`unexplained`) **tidak dikirim sama sekali**.
+
+> **Kenapa `unexplained` dibuang.** Kategori itu didominasi perilaku normal: user menggeser app dari app switcher, developer menekan Stop di Xcode, atau rebuild. Sistem operasi tidak memberi informasi lebih setelah SIGKILL, sehingga terminasi semacam ini tidak bisa dibedakan dari penutupan biasa dan tidak punya nilai diagnostik. Mengirimnya hanya menghasilkan derau bervolume tinggi.
+>
+> **Kenapa bukan `crash`.** Proses yang dihentikan dari luar tidak punya stack trace, tidak disebabkan kode aplikasi, dan tidak bisa dicegah olehnya. Menghitungnya sebagai crash membuat crash-free rate buruk secara palsu — selama pengembangan hampir setiap sesi berakhir demikian. Temuan ini muncul dari run nyata pertama pada app pilot.
+>
+> **Catatan paritas.** Android menghasilkan bentuk data yang setara lewat `ApplicationExitInfo` (`REASON_LOW_MEMORY` dan sejenisnya), jadi tipe event ini berlaku untuk kedua platform. Pemetaan nilai Android ke enum di atas ditetapkan saat port Android dikerjakan.
+
+**Fingerprint (§6):** hash dari (`termination_reason` + versi app).
+
 ---
 
 ## 5. Enum `failure_category`

@@ -1,9 +1,10 @@
 import Foundation
 
-/// Maps one raw KSCrash report dictionary (`KSCrashReportDictionary.value`) to our `crash`
-/// event schema (docs/01 §4.3). Pure and side-effect-free so it's directly unit-testable
-/// against fixture dictionaries shaped like KSCrash's own `Example-Reports/*.json`, without
-/// touching KSCrash itself.
+/// Maps one raw KSCrash report dictionary (`KSCrashReportDictionary.value`) to either our
+/// `crash` event schema (docs/01 §4.3) or, for KSCrash's Termination-monitor reports, our
+/// `termination` event schema (docs/01 §4.7, docs/02 MOB-15b). Pure and side-effect-free so
+/// it's directly unit-testable against fixture dictionaries shaped like KSCrash's own
+/// `Example-Reports/*.json`, without touching KSCrash itself.
 ///
 /// `threads` and `binary_images` are re-serialized as JSON strings rather than decoded field
 /// by field — `AttributeValue` only carries JSON scalars (same convention as breadcrumbs and
@@ -14,6 +15,11 @@ enum CrashReportMapper {
         guard let crash = report["crash"] as? [String: Any] else { return nil }
         let error = crash["error"] as? [String: Any] ?? [:]
         let errorType = error["type"] as? String ?? "unknown"
+
+        if errorType == "termination" {
+            return makeTerminationEvent(from: report, error: error, seq: seq)
+        }
+
         let (name, reason) = extractNameReason(errorType: errorType, error: error)
 
         var attrs: [String: AttributeValue] = [
@@ -31,30 +37,74 @@ enum CrashReportMapper {
         if let breadcrumbsJSON = (report["user"] as? [String: Any])?["breadcrumbs"] as? String {
             attrs["breadcrumbs"] = .string(breadcrumbsJSON)
         }
-
-        let stats = (report["system"] as? [String: Any])?["application_stats"] as? [String: Any] ?? [:]
-        let activeSinceLaunch = (stats["active_time_since_launch"] as? Double) ?? 0
-        let backgroundSinceLaunch = (stats["background_time_since_launch"] as? Double) ?? 0
-        attrs["time_since_launch_ms"] = .int(Int((activeSinceLaunch + backgroundSinceLaunch) * 1000))
-
-        let appState = (stats["application_in_foreground"] as? Bool).map { $0 ? "foreground" : "background" }
+        attrs["time_since_launch_ms"] = .int(timeSinceLaunchMs(from: report))
 
         return Event(
             type: "crash",
             timestamp: timestamp(from: report),
             seq: seq,
             attrs: attrs,
-            ctx: EventContext(appState: appState)
+            ctx: EventContext(appState: appState(from: report))
+        )
+    }
+
+    // MARK: - termination (docs/01 §4.7, docs/02 MOB-15b)
+
+    /// KSCrash's Termination monitor injects a synthetic report — complete with a fake
+    /// `signal: SIGKILL` block "for backward compatibility" — for OS-level kills that could
+    /// never be caught live: an Xcode Stop-button kill, the user swiping the app away, a
+    /// rebuild, or the system reclaiming memory under pressure. It's not a crash (no stack,
+    /// not caused by or catchable by app code) — 2026-09-01 real-run finding, spec decision in
+    /// docs/01 §4.7 / docs/02 MOB-15b, full reasoning in `CONSTITUTION.md`.
+    ///
+    /// Only the five resource-heuristic causes KSCrash can actually back with evidence (the
+    /// specific critical resource state was observed in the last snapshot before death) become
+    /// a `termination` event. `unexplained` — and anything else unrecognized — is dropped: the
+    /// OS gives no signal after SIGKILL, so it's indistinguishable from an ordinary dev/user
+    /// termination and carries no diagnostic value (§4.7's explicit "why `unexplained` is
+    /// dropped" note).
+    private static let terminationReasonEnum: Set<String> = [
+        "memory_limit", "memory_pressure", "cpu", "thermal", "low_battery"
+    ]
+
+    private static func makeTerminationEvent(from report: [String: Any], error: [String: Any], seq: Int) -> Event? {
+        guard let reason = error["termination_reason"] as? String, terminationReasonEnum.contains(reason) else {
+            return nil
+        }
+
+        return Event(
+            type: "termination",
+            timestamp: timestamp(from: report),
+            seq: seq,
+            attrs: [
+                "termination_reason": .string(reason),
+                "time_since_launch_ms": .int(timeSinceLaunchMs(from: report))
+            ],
+            ctx: EventContext(appState: appState(from: report))
         )
     }
 
     // MARK: - Field extraction
 
+    private static func timeSinceLaunchMs(from report: [String: Any]) -> Int {
+        let stats = (report["system"] as? [String: Any])?["application_stats"] as? [String: Any] ?? [:]
+        let activeSinceLaunch = (stats["active_time_since_launch"] as? Double) ?? 0
+        let backgroundSinceLaunch = (stats["background_time_since_launch"] as? Double) ?? 0
+        return Int((activeSinceLaunch + backgroundSinceLaunch) * 1000)
+    }
+
+    private static func appState(from report: [String: Any]) -> String? {
+        let stats = (report["system"] as? [String: Any])?["application_stats"] as? [String: Any] ?? [:]
+        return (stats["application_in_foreground"] as? Bool).map { $0 ? "foreground" : "background" }
+    }
+
     /// docs/01 §4.3 `crash_type`: `signal` | `exception` | `anr` | `hang`. `anr` is
     /// Android-only (parity note docs/01 §4.3 header); iOS only ever produces the other three.
+    /// `errorType == "termination"` never reaches here — `makeEvent` routes it to
+    /// `makeTerminationEvent` instead (docs/01 §4.7, a distinct event type).
     private static func mapCrashType(_ errorType: String) -> String {
         switch errorType {
-        case "signal", "mach", "deadlock", "termination": return "signal"
+        case "signal", "mach", "deadlock": return "signal"
         case "hang": return "hang"
         default: return "exception" // nsexception, cpp_exception, user, profile, unknown
         }
@@ -87,9 +137,6 @@ enum CrashReportMapper {
             let signalName = signal["name"] as? String ?? "signal"
             let machExceptionName = (error["mach"] as? [String: Any])?["exception_name"] as? String
             return (signalName, topLevelReason ?? machExceptionName ?? "")
-        }
-        if errorType == "termination" {
-            return ("termination", topLevelReason ?? "")
         }
         return (errorType, topLevelReason ?? "")
     }

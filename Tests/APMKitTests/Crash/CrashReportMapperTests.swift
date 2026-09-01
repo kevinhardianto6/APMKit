@@ -180,4 +180,51 @@ struct CrashReportMapperTests {
         let event = try #require(CrashReportMapper.makeEvent(from: dict, seq: 1))
         #expect(event.tsClient.hasPrefix("1970-01-17T19:18:32"))
     }
+
+    @Test(
+        "a KSCrash Termination-monitor report (the SIGKILL/OOM/Xcode-Stop synthetic report) with one of the five resource-heuristic causes maps to a distinct `termination` event (docs/01 §4.7, docs/02 MOB-15b) — never `crash`",
+        arguments: ["memory_limit", "memory_pressure", "cpu", "thermal", "low_battery"]
+    )
+    func terminationMonitorResourceKillMapsToTerminationEvent(terminationReason: String) throws {
+        let dict = report(
+            errorType: "termination",
+            error: [
+                "termination_reason": terminationReason,
+                "is_fatal": true,
+                "is_clean_exit": false,
+                "signal": ["signal": 9, "name": "SIGKILL", "code": 0]
+            ],
+            activeSinceLaunch: 0.481,
+            backgroundSinceLaunch: 0.1
+        )
+        let event = try #require(CrashReportMapper.makeEvent(from: dict, seq: 1))
+
+        #expect(event.type == "termination")
+        #expect(string(event, "termination_reason") == terminationReason)
+        #expect(int(event, "time_since_launch_ms") == 581)
+        #expect(event.attrs["crash_type"] == nil)
+    }
+
+    @Test(
+        "a KSCrash Termination-monitor report with cause `unexplained` — or anything else unrecognized — yields no event at all: 2026-09-01 real-run finding (this used to map to crash_type signal with an empty reason, making crash-free rate falsely bad); docs/01 §4.7 explicitly drops `unexplained` since the OS gives no signal after SIGKILL to distinguish it from an ordinary dev/user termination",
+        arguments: ["unexplained", "clean", "crash", "hang", "first_launch", "os_upgrade", "app_upgrade", "reboot", "none"]
+    )
+    func terminationMonitorNonResourceCauseYieldsNoEvent(terminationReason: String) {
+        let dict = report(
+            errorType: "termination",
+            error: [
+                "termination_reason": terminationReason,
+                "is_fatal": true,
+                "is_clean_exit": false,
+                "signal": ["signal": 9, "name": "SIGKILL", "code": 0]
+            ]
+        )
+        #expect(CrashReportMapper.makeEvent(from: dict, seq: 1) == nil)
+    }
+
+    @Test("a Termination-monitor report missing termination_reason entirely yields no event, not a crash")
+    func terminationMonitorMissingReasonYieldsNoEvent() {
+        let dict = report(errorType: "termination", error: [:])
+        #expect(CrashReportMapper.makeEvent(from: dict, seq: 1) == nil)
+    }
 }
