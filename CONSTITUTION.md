@@ -123,3 +123,21 @@ defaults to on this machine. Spec says "iOS 15+, adjust to our deployment target
 stricter constraint given. Chose iOS 15 as the floor: broad compatibility for an
 internally-adopted SDK, and sufficient for async/await, `Compression` framework APIs (F5), and
 `URLSessionTaskMetrics` (F3). Revisit if an adopter team needs a stricter floor.
+
+### 2026-09-01 · MOB-30 Simulator false positive: skip the sandbox-write probe, don't loosen device logic
+
+Pilot ingestion server's real traffic showed every clean Simulator session reporting
+`integrity.is_rooted = true`. Cause: `DeviceIntegrityDetector.canWriteOutsideSandbox()` writes
+to `/private/...` to detect a jailbroken sandbox escape, but the Simulator runs its whole
+process unsandboxed on the host macOS — that write structurally always succeeds there, so the
+probe proved nothing and always registered as a rooted signal. Two options considered:
+(a) weaken `JailbreakVerdict.isRooted`'s combination logic generally, or (b) keep the
+combination logic exactly as-is and only change what signal reaches it on Simulator. Chose
+(b): `JailbreakVerdict.sandboxWriteSignal(isSimulator:rawWriteSucceeded:)` discards the raw
+result specifically when `isSimulator` is true, and passes it through unchanged otherwise — a
+real device's detection is byte-for-byte what it was before this fix. The file/symlink probes
+were left alone (not routed through a similar Simulator skip) because a stock Simulator
+filesystem doesn't carry jailbreak tooling paths and a hit there would still be a real signal,
+not a structural false positive — though that reasoning rests on how Simulator's filesystem
+happens to be laid out today, not a platform guarantee, so it stays on the manual verification
+checklist (`FEATURES.md` item 1) rather than being treated as proven.

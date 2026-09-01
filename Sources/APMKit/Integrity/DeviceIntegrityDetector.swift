@@ -22,6 +22,25 @@ import Darwin
 /// likewise can't be exercised by `swift test` on a macOS host, which never compiles for
 /// Simulator. Real-device + Simulator verification is a manual step for the pilot, not
 /// something to fake in automated tests.
+///
+/// **Simulator false positive (2026-09-01 real-run finding):** the pilot ingestion server
+/// showed every clean Simulator session reporting `is_rooted = true`. Cause: the Simulator
+/// runs as an ordinary unsandboxed macOS process, so `canWriteOutsideSandbox()`'s write to
+/// `/private/...` structurally always succeeds there — a signal that means "jailbroken" only
+/// on a real device, where the sandbox is real and would normally block it. That raw `true`
+/// was feeding straight into `JailbreakVerdict.isRooted`'s OR-combination. Fixed by having
+/// `isRooted()` route the raw write result through `JailbreakVerdict.sandboxWriteSignal`,
+/// which discards it (treats it as "did not succeed") specifically on Simulator and passes it
+/// through unchanged on device — device detection is not weakened. **What this can and can't
+/// prove:** the file/symlink probes are left untouched here because a stock Simulator
+/// filesystem doesn't carry jailbreak tooling and a hit there would still be a real (if
+/// theoretical) signal, not a structural false positive like the sandbox-write probe was — but
+/// that's an argument from how Simulator's filesystem happens to be laid out today, not a
+/// proof; only a real Simulator/device run (`FEATURES.md` manual checklist item 1) can confirm
+/// `is_rooted` actually reads `false` end-to-end. `swift test` on the macOS host can't
+/// exercise any of this either way, clean or rooted — it never compiles the `#if os(iOS)`
+/// branch at all, so the unit test for this fix targets only the pure `sandboxWriteSignal`
+/// mapping, not the live Simulator probe.
 public enum DeviceIntegrityDetector {
     public static func snapshot() -> IntegritySnapshot {
         IntegritySnapshot(
@@ -77,7 +96,10 @@ public enum DeviceIntegrityDetector {
     static func isRooted(fileManager: FileManager = .default) -> Bool {
         JailbreakVerdict.isRooted(
             suspiciousFileFound: suspiciousPaths.contains { fileManager.fileExists(atPath: $0) },
-            sandboxWriteSucceeded: canWriteOutsideSandbox(),
+            sandboxWriteSucceeded: JailbreakVerdict.sandboxWriteSignal(
+                isSimulator: isEmulator(),
+                rawWriteSucceeded: canWriteOutsideSandbox()
+            ),
             suspiciousSymlinkFound: symlinkCheckPaths.contains { isSymlink($0, fileManager: fileManager) }
         )
     }
