@@ -237,3 +237,44 @@ declaring and forwarding its own, the captured location would silently collapse 
 inside the SDK the inner call happens to live, not the app's real call site. Backward
 compatible: existing callers (e.g. `VerificationApp`) that don't pass `file`/`function`/`line`
 now get them captured for free.
+
+### 2026-09-02 · `crash` payload reshaped to match docs/01 §4.3.1/§4.3.2 exactly, `is_app` added
+
+A spec gap was closed while building the Backoffice: §4.3.1/§4.3.2 now define the exact
+per-frame and per-binary-image wire shape, extending MOB-17. The new requirement is `is_app`
+on every frame and binary image — `true` for the app's own main binary or an app-owned
+framework, `false` for system binaries — set by the SDK at capture time, because only the SDK
+can see its own bundle layout; deriving it downstream by name-matching would be fragile and
+blind to app-owned frameworks.
+
+**Audit finding, not just `is_app` missing:** `CrashReportMapper` previously re-serialized
+KSCrash's raw `threads`/`binary_images` dicts verbatim (`jsonString(threads)`), which never
+matched this now-precise contract at all — confirmed against real KSCrash output
+(`Example-Reports/*.json` plus the vendored source): addresses are plain decimal numbers, not
+the documented hex strings; `binary_images[].name` is the full on-device path, not the
+documented basename; `image_addr`/`image_size`/`cpu_type` don't match the documented
+`base_addr`/`size`/`arch`; no `file`/`line` keys exist at all (KSCrash instead carries an
+unrelated `line_of_code`). Unlike the earlier `termination` gap, this wasn't "which side is
+right" — docs/01 is unambiguously authoritative here (the Backoffice is already rendering
+against it), so the fix was to bring `CrashReportMapper` in line with the spec, not to flag a
+new schema decision.
+
+**How `is_app` is actually computed:** KSCrash reduces every frame's `object_name` to a
+basename before we ever see it (`ksfu_lastPathEntry`) — the full path needed to tell "our code"
+from "system code" exists *only* on the top-level `binary_images` array, and only there. So
+`reshapeBinaryImages` computes `is_app` per image from `image["name"]` (the full path) against
+`Bundle.main.bundlePath`, collects the basenames it classified as app-owned, and
+`reshapeThreads` looks up each frame's already-basename `object_name` against that set. An
+empty `appBundlePath` is explicitly guarded against — `"x".hasPrefix("")` is `true` in Swift,
+which would otherwise misclassify every system binary as app-owned.
+
+**Arch string mapping** (`cpu_type`/`cpu_subtype` → `"arm64"`/`"arm64e"`/`"x86_64"`) is
+hardcoded rather than imported from Darwin (the Mach-O macros are bitwise expressions the Swift
+Clang importer doesn't reliably expose) or pulled from KSCrash's own private
+`kscpu_archForCPU` (would need a new module dependency, `RecordingCore`, for six stable,
+decades-old constants) — covers every arch this SDK's deployment target can actually report.
+
+**Confirmed matching, no change needed:** docs/01 §4.5.1's breadcrumb snapshot shape
+(`timestamp`/`category`/`level`/`message`, JSON-string-encoded) already matches
+`Breadcrumb`'s `Codable` output exactly, field names and ISO-8601-with-fractional-seconds
+format included — audited, not assumed.

@@ -121,7 +121,7 @@ struct CrashReportMapperTests {
         #expect(bool(unresolvedEvent, "is_fatal") == true)
     }
 
-    @Test("threads and binary_images round-trip as JSON strings (MOB-17: uuid preserved)")
+    @Test("threads and binary_images round-trip as JSON strings, thread-level fields preserved (MOB-17: uuid preserved)")
     func threadsAndBinaryImagesAreJSONEncoded() throws {
         let dict = report(
             errorType: "signal",
@@ -133,9 +133,165 @@ struct CrashReportMapperTests {
         let threadsJSON = try #require(string(event, "threads"))
         let decodedThreads = try JSONSerialization.jsonObject(with: Data(threadsJSON.utf8)) as? [[String: Any]]
         #expect(decodedThreads?.first?["crashed"] as? Bool == true)
+        #expect(decodedThreads?.first?["index"] as? Int == 0)
 
         let imagesJSON = try #require(string(event, "binary_images"))
         #expect(imagesJSON.contains("99E112D2-0CB4-3F73-BDA6-BCFC1F190724"))
+    }
+
+    // MARK: - threads/binary_images reshaping to docs/01 §4.3.1/§4.3.2 (MOB-17 extension)
+
+    /// A realistic nested fixture — KSCrash's actual shape (confirmed against
+    /// `Example-Reports/*.json`): each thread is a flat dict with `backtrace.contents` holding
+    /// frames, each binary image carries the full on-device path (not a basename), decimal
+    /// addresses, and numeric `cpu_type`/`cpu_subtype`. `object_addr`/`instruction_addr` use
+    /// docs/01 §4.3.1's own example values (`0x104a10000`/`0x104a2c810`) so the hex-formatting
+    /// assertions below double as a direct check against the spec's own worked example.
+    private func realisticCrashDict(appBundlePath: String = "/private/var/containers/Bundle/Application/UUID/MerchantApp.app") -> [String: Any] {
+        report(
+            errorType: "signal",
+            error: ["signal": ["name": "SIGSEGV"]],
+            threads: [
+                [
+                    "index": 0,
+                    "crashed": true,
+                    "dispatch_queue": "com.apple.main-thread",
+                    "backtrace": [
+                        "contents": [
+                            [
+                                "index": 0, "object_name": "MerchantApp",
+                                "object_addr": 4372627456, "instruction_addr": 4372744208,
+                                "symbol_name": "-[ViewController crash]"
+                            ],
+                            [
+                                "index": 1, "object_name": "UIKitCore",
+                                "object_addr": 4400000000, "instruction_addr": 4400012345,
+                                "symbol_name": "-[UIApplication sendAction:to:from:forEvent:]"
+                            ]
+                        ]
+                    ]
+                ]
+            ],
+            binaryImages: [
+                [
+                    "name": "\(appBundlePath)/MerchantApp", "uuid": "A1B2C3D4-0000-0000-0000-000000000000",
+                    "image_addr": 4372627456, "image_size": 2457600, "cpu_type": 0x0100000C, "cpu_subtype": 0
+                ],
+                [
+                    "name": "/System/Library/Frameworks/UIKit.framework/UIKitCore", "uuid": "B2C3D4E5-0000-0000-0000-000000000000",
+                    "image_addr": 4400000000, "image_size": 30000000, "cpu_type": 0x0100000C, "cpu_subtype": 0
+                ]
+            ]
+        )
+    }
+
+    private func decodedThreads(_ event: Event) throws -> [[String: Any]] {
+        let json = try #require(string(event, "threads"))
+        return try #require(JSONSerialization.jsonObject(with: Data(json.utf8)) as? [[String: Any]])
+    }
+
+    private func decodedImages(_ event: Event) throws -> [[String: Any]] {
+        let json = try #require(string(event, "binary_images"))
+        return try #require(JSONSerialization.jsonObject(with: Data(json.utf8)) as? [[String: Any]])
+    }
+
+    @Test("is_app is true for a frame/binary_image inside the app's own bundle, false for a system framework — computed by the SDK from the full path, since KSCrash has already reduced object_name to a basename by the time we see it")
+    func isAppComputedFromBundlePath() throws {
+        let bundlePath = "/private/var/containers/Bundle/Application/UUID/MerchantApp.app"
+        let event = try #require(CrashReportMapper.makeEvent(from: realisticCrashDict(appBundlePath: bundlePath), seq: 1, appBundlePath: bundlePath))
+        let images = try decodedImages(event)
+        let frames = try #require((try decodedThreads(event).first?["frames"]) as? [[String: Any]])
+
+        let appImage = try #require(images.first { $0["name"] as? String == "MerchantApp" })
+        let systemImage = try #require(images.first { $0["name"] as? String == "UIKitCore" })
+        #expect(appImage["is_app"] as? Bool == true)
+        #expect(systemImage["is_app"] as? Bool == false)
+
+        let appFrame = try #require(frames.first { $0["object_name"] as? String == "MerchantApp" })
+        let systemFrame = try #require(frames.first { $0["object_name"] as? String == "UIKitCore" })
+        #expect(appFrame["is_app"] as? Bool == true)
+        #expect(systemFrame["is_app"] as? Bool == false)
+    }
+
+    @Test("an app-owned embedded framework (not the main executable) is also is_app: true — matching by path containment, not by name equality with the app itself")
+    func isAppTrueForAppOwnedFramework() throws {
+        let dict = report(
+            errorType: "signal",
+            error: ["signal": ["name": "SIGSEGV"]],
+            binaryImages: [
+                ["name": "/private/var/containers/Bundle/Application/UUID/MerchantApp.app/Frameworks/MyFeatureKit.framework/MyFeatureKit",
+                 "uuid": "C3D4E5F6-0000-0000-0000-000000000000", "image_addr": 1, "image_size": 1, "cpu_type": 0x0100000C, "cpu_subtype": 0]
+            ]
+        )
+        let event = try #require(CrashReportMapper.makeEvent(from: dict, seq: 1, appBundlePath: "/private/var/containers/Bundle/Application/UUID/MerchantApp.app"))
+        let images = try decodedImages(event)
+        #expect(images.first?["is_app"] as? Bool == true)
+        #expect(images.first?["name"] as? String == "MyFeatureKit")
+    }
+
+    @Test("an empty appBundlePath never matches everything — hasPrefix(\"\") is true in Swift, which would misclassify every system binary as app-owned if not guarded")
+    func emptyAppBundlePathNeverMatches() throws {
+        let dict = report(errorType: "signal", error: ["signal": ["name": "SIGSEGV"]], binaryImages: [
+            ["name": "/System/Library/Frameworks/UIKit.framework/UIKitCore", "uuid": "X", "image_addr": 1, "image_size": 1, "cpu_type": 0, "cpu_subtype": 0]
+        ])
+        let event = try #require(CrashReportMapper.makeEvent(from: dict, seq: 1, appBundlePath: ""))
+        let images = try decodedImages(event)
+        #expect(images.first?["is_app"] as? Bool == false)
+    }
+
+    @Test("object_addr/instruction_addr/base_addr are formatted as lowercase 0x hex strings, matching docs/01 §4.3.1/§4.3.2's own worked example exactly")
+    func addressesAreHexStrings() throws {
+        let event = try #require(CrashReportMapper.makeEvent(from: realisticCrashDict(), seq: 1))
+        let images = try decodedImages(event)
+        let frames = try #require((try decodedThreads(event).first?["frames"]) as? [[String: Any]])
+
+        let appImage = try #require(images.first { $0["name"] as? String == "MerchantApp" })
+        #expect(appImage["base_addr"] as? String == "0x104a10000")
+
+        let appFrame = try #require(frames.first { $0["object_name"] as? String == "MerchantApp" })
+        #expect(appFrame["object_addr"] as? String == "0x104a10000")
+        #expect(appFrame["instruction_addr"] as? String == "0x104a2c810")
+    }
+
+    @Test("cpu_type/cpu_subtype map to arch: arm64e when the ARM64E subtype is set, otherwise arm64 for CPU_TYPE_ARM64, x86_64 for CPU_TYPE_X86_64")
+    func cpuTypeMapsToArchString() throws {
+        func arch(cpuType: Int, cpuSubType: Int) throws -> String? {
+            let dict = report(errorType: "signal", error: ["signal": ["name": "SIGSEGV"]], binaryImages: [
+                ["name": "/x", "uuid": "X", "image_addr": 1, "image_size": 1, "cpu_type": cpuType, "cpu_subtype": cpuSubType]
+            ])
+            let event = try #require(CrashReportMapper.makeEvent(from: dict, seq: 1))
+            return try decodedImages(event).first?["arch"] as? String
+        }
+
+        #expect(try arch(cpuType: 0x0100000C, cpuSubType: 0) == "arm64")
+        #expect(try arch(cpuType: 0x0100000C, cpuSubType: 2) == "arm64e")
+        #expect(try arch(cpuType: 0x01000007, cpuSubType: 0) == "x86_64")
+    }
+
+    @Test("binary_images name is the basename, not the full on-device path — matching docs/01 §4.3.2's example (\"MerchantApp\", not \"/private/var/.../MerchantApp.app/MerchantApp\")")
+    func binaryImageNameIsBasenameNotFullPath() throws {
+        let event = try #require(CrashReportMapper.makeEvent(from: realisticCrashDict(), seq: 1))
+        let images = try decodedImages(event)
+        #expect(images.map { $0["name"] as? String }.contains("MerchantApp"))
+        #expect(!images.contains { ($0["name"] as? String)?.contains("/") == true })
+    }
+
+    @Test("symbol_name is carried through from KSCrash; file and line are always null — only the backend fills them in, post-symbolication (BE-11)")
+    func fileAndLineAreAlwaysNullSymbolNameCarriesThrough() throws {
+        let event = try #require(CrashReportMapper.makeEvent(from: realisticCrashDict(), seq: 1))
+        let frames = try #require((try decodedThreads(event).first?["frames"]) as? [[String: Any]])
+        let appFrame = try #require(frames.first { $0["object_name"] as? String == "MerchantApp" })
+
+        #expect(appFrame["symbol_name"] as? String == "-[ViewController crash]")
+        #expect(appFrame["file"] is NSNull)
+        #expect(appFrame["line"] is NSNull)
+    }
+
+    @Test("thread name falls back to dispatch_queue when no pthread name was set — reproducing docs/01 §4.3.1's own example (\"com.apple.main-thread\")")
+    func threadNameFallsBackToDispatchQueue() throws {
+        let event = try #require(CrashReportMapper.makeEvent(from: realisticCrashDict(), seq: 1))
+        let threads = try decodedThreads(event)
+        #expect(threads.first?["name"] as? String == "com.apple.main-thread")
     }
 
     @Test("app_state derives from application_in_foreground")

@@ -1,17 +1,20 @@
 import Foundation
 
 /// Maps one raw KSCrash report dictionary (`KSCrashReportDictionary.value`) to either our
-/// `crash` event schema (docs/01 §4.3) or, for KSCrash's Termination-monitor reports, our
-/// `termination` event schema (docs/01 §4.7, docs/02 MOB-15b). Pure and side-effect-free so
-/// it's directly unit-testable against fixture dictionaries shaped like KSCrash's own
-/// `Example-Reports/*.json`, without touching KSCrash itself.
+/// `crash` event schema (docs/01 §4.3/§4.3.1/§4.3.2) or, for KSCrash's Termination-monitor
+/// reports, our `termination` event schema (docs/01 §4.7, docs/02 MOB-15b). Pure and
+/// side-effect-free so it's directly unit-testable against fixture dictionaries shaped like
+/// KSCrash's own `Example-Reports/*.json`, without touching KSCrash itself.
 ///
-/// `threads` and `binary_images` are re-serialized as JSON strings rather than decoded field
-/// by field — `AttributeValue` only carries JSON scalars (same convention as breadcrumbs and
-/// `req_headers` elsewhere), and the backend only needs raw addresses/symbols plus
-/// `binary_images` + UUID for symbolication (MOB-17), not frame-level structure on our side.
+/// `threads`/`binary_images` are reshaped (not just re-serialized) into docs/01 §4.3.1/§4.3.2's
+/// exact wire shape — KSCrash's own raw field names/formats differ (decimal addresses instead
+/// of hex strings, `image_addr`/`image_size`/`cpu_type` instead of `base_addr`/`size`/`arch`,
+/// no `is_app` at all) — then re-serialized as one JSON string per array, since `AttributeValue`
+/// only carries JSON scalars (same convention as breadcrumbs and `req_headers` elsewhere).
 enum CrashReportMapper {
-    static func makeEvent(from report: [String: Any], seq: Int) -> Event? {
+    /// `appBundlePath` defaults to this process's own bundle — real callers never override it;
+    /// tests do, to exercise `is_app` without a real app bundle on the macOS host.
+    static func makeEvent(from report: [String: Any], seq: Int, appBundlePath: String = Bundle.main.bundlePath) -> Event? {
         guard let crash = report["crash"] as? [String: Any] else { return nil }
         let error = crash["error"] as? [String: Any] ?? [:]
         let errorType = error["type"] as? String ?? "unknown"
@@ -28,12 +31,20 @@ enum CrashReportMapper {
             "reason": .string(reason),
             "is_fatal": .bool(isFatal(errorType: errorType, error: error))
         ]
-        if let threads = crash["threads"] {
-            attrs["threads"] = .string(jsonString(threads))
+
+        // `appOwnedNames` is derived from `binary_images` (the only place a full path exists —
+        // KSCrash already reduces each frame's `object_name` to a basename before we ever see
+        // it) and reused to compute every frame's `is_app`, so the two arrays must be built
+        // together even though only one of them may end up in `attrs`.
+        let rawImages = (report["binary_images"] as? [[String: Any]]) ?? []
+        let (reshapedImages, appOwnedNames) = reshapeBinaryImages(rawImages, appBundlePath: appBundlePath)
+        if report["binary_images"] != nil {
+            attrs["binary_images"] = .string(jsonString(reshapedImages))
         }
-        if let images = report["binary_images"] {
-            attrs["binary_images"] = .string(jsonString(images))
+        if let rawThreads = crash["threads"] as? [[String: Any]] {
+            attrs["threads"] = .string(jsonString(reshapeThreads(rawThreads, appOwnedNames: appOwnedNames)))
         }
+
         if let breadcrumbsJSON = (report["user"] as? [String: Any])?["breadcrumbs"] as? String {
             attrs["breadcrumbs"] = .string(breadcrumbsJSON)
         }
@@ -46,6 +57,113 @@ enum CrashReportMapper {
             attrs: attrs,
             ctx: EventContext(appState: appState(from: report))
         )
+    }
+
+    // MARK: - threads / binary_images reshaping (docs/01 §4.3.1/§4.3.2, MOB-17)
+
+    /// Reshapes KSCrash's raw `binary_images` (absolute paths, decimal addresses, numeric
+    /// `cpu_type`/`cpu_subtype`) into docs/01 §4.3.2's wire shape and computes `is_app`: `true`
+    /// when the image's raw path lives inside this app's own bundle container — covering both
+    /// the main executable and any app-embedded framework (e.g. `MerchantApp.app/Frameworks/…`)
+    /// — `false` for anything outside it (`/System/Library/…`, `/usr/lib/…`). This can only
+    /// happen here: the full path is available *only* on this top-level array, right now — by
+    /// the time a frame references it, KSCrash has already reduced it to a basename, and
+    /// deriving app-ownership downstream from a bare basename would be fragile (name collisions)
+    /// and blind to app-owned frameworks (whose names don't match the app's own).
+    ///
+    /// Returns the reshaped array plus the set of basenames it classified as app-owned, so
+    /// `reshapeThreads` can look up each frame's `object_name` (already a basename) against it.
+    private static func reshapeBinaryImages(
+        _ rawImages: [[String: Any]],
+        appBundlePath: String
+    ) -> (json: [[String: Any]], appOwnedNames: Set<String>) {
+        var appOwnedNames: Set<String> = []
+        let reshaped: [[String: Any]] = rawImages.map { image in
+            let fullPath = image["name"] as? String ?? ""
+            let name = (fullPath as NSString).lastPathComponent
+            // An empty `appBundlePath` must never mean "everything matches" — `"x".hasPrefix("")`
+            // is `true` in Swift, which would misclassify every system binary as app-owned.
+            let isApp = !appBundlePath.isEmpty && fullPath.hasPrefix(appBundlePath)
+            if isApp { appOwnedNames.insert(name) }
+            return [
+                "name": name,
+                "uuid": image["uuid"] ?? NSNull(),
+                "base_addr": hexAddress(image["image_addr"]),
+                "size": image["image_size"] ?? 0,
+                "arch": archString(cpuType: image["cpu_type"], cpuSubType: image["cpu_subtype"]),
+                "is_app": isApp
+            ]
+        }
+        return (reshaped, appOwnedNames)
+    }
+
+    /// Reshapes KSCrash's raw `threads` (each a flat dict with `index`/`crashed`/`name`/
+    /// `dispatch_queue` plus a nested `backtrace.contents` array of frames) into docs/01
+    /// §4.3.1's shape: a flat `frames` array per thread, hex address strings, `is_app` looked
+    /// up from `appOwnedNames`, and `symbol_name`/`file`/`line` — the last two always `null`
+    /// here; only the backend fills them in, post-symbolication (BE-11).
+    private static func reshapeThreads(_ rawThreads: [[String: Any]], appOwnedNames: Set<String>) -> [[String: Any]] {
+        rawThreads.map { thread in
+            let rawFrames = (thread["backtrace"] as? [String: Any])?["contents"] as? [[String: Any]] ?? []
+            let frames: [[String: Any]] = rawFrames.map { frame in
+                let objectName = frame["object_name"] as? String ?? ""
+                return [
+                    "index": frame["index"] ?? 0,
+                    "object_name": objectName,
+                    "object_addr": hexAddress(frame["object_addr"]),
+                    "instruction_addr": hexAddress(frame["instruction_addr"]),
+                    "is_app": appOwnedNames.contains(objectName),
+                    "symbol_name": frame["symbol_name"] ?? NSNull(),
+                    "file": NSNull(),
+                    "line": NSNull()
+                ]
+            }
+            return [
+                "index": thread["index"] ?? 0,
+                "crashed": thread["crashed"] ?? false,
+                // KSCrash only sets a pthread `name` when one was actually assigned; every
+                // thread has a `dispatch_queue` label (e.g. "com.apple.main-thread" for main),
+                // which is the fallback docs/01 §4.3.1's own example is built from.
+                "name": ((thread["name"] as? String) ?? (thread["dispatch_queue"] as? String)) as Any? ?? NSNull(),
+                "frames": frames
+            ]
+        }
+    }
+
+    /// KSCrash gives raw addresses as plain decimal numbers (`Int`/`Double`, depending on how
+    /// the raw dict was bridged) — docs/01 §4.3.1/§4.3.2's own example is a lowercase `0x…`
+    /// hex string, so this normalizes either numeric shape to that.
+    private static func hexAddress(_ rawAddress: Any?) -> String {
+        if let intValue = rawAddress as? Int {
+            return String(format: "0x%llx", intValue)
+        }
+        if let doubleValue = rawAddress as? Double {
+            return String(format: "0x%llx", Int64(doubleValue))
+        }
+        return "0x0"
+    }
+
+    /// Mach-O `cpu_type_t`/`cpu_subtype_t` (`<mach/machine.h>`) → docs/01 §4.3.2's `arch`
+    /// string. Hardcoded rather than imported from Darwin (the raw macros are bitwise
+    /// expressions the Swift Clang importer doesn't reliably expose) or pulled from KSCrash's
+    /// own private `kscpu_archForCPU` (would need a new module dependency — `RecordingCore` —
+    /// for six stable, decades-old constants). Covers every arch this SDK's deployment target
+    /// (iOS 15+ device and Simulator) can actually report; anything else falls back to a
+    /// labeled raw value rather than guessing.
+    private static func archString(cpuType: Any?, cpuSubType: Any?) -> String {
+        let cpuType = (cpuType as? Int) ?? 0
+        let cpuSubType = (cpuSubType as? Int) ?? 0
+        let cpuTypeARM64 = 0x0100000C
+        let cpuTypeX86_64 = 0x01000007
+        let cpuSubtypeARM64E = 2
+        switch cpuType {
+        case cpuTypeARM64:
+            return cpuSubType == cpuSubtypeARM64E ? "arm64e" : "arm64"
+        case cpuTypeX86_64:
+            return "x86_64"
+        default:
+            return "unknown(\(cpuType),\(cpuSubType))"
+        }
     }
 
     // MARK: - termination (docs/01 §4.7, docs/02 MOB-15b)

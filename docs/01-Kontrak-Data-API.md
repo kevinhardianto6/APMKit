@@ -131,10 +131,58 @@ Konsekuensinya: input mentah yang sama (mis. nomor telepon yang sama) selalu men
 | `crash_type` | `signal` \| `exception` \| `anr` \| `hang` |
 | `name`, `reason` | Nama exception/signal dan alasannya |
 | `is_fatal` | bool |
-| `threads` | Array thread dengan stack frame (alamat + offset) |
-| `binary_images` | Daftar binary + UUID — **wajib** untuk symbolication |
+| `threads` | Array thread — bentuknya di §4.3.1 |
+| `binary_images` | Daftar binary yang dimuat + UUID — **wajib** untuk symbolication; bentuknya di §4.3.2 |
 | `app_state` | State saat crash |
 | `time_since_launch_ms` | int |
+
+#### 4.3.1 Bentuk `threads`
+
+```json
+"threads": [
+  {
+    "index": 0,
+    "crashed": true,
+    "name": "com.apple.main-thread",
+    "frames": [
+      {
+        "index": 0,
+        "object_name": "MerchantApp",
+        "object_addr": "0x104a10000",
+        "instruction_addr": "0x104a2c810",
+        "is_app": true,
+        "symbol_name": null,
+        "file": null,
+        "line": null
+      }
+    ]
+  }
+]
+```
+
+| Field frame | Keterangan |
+|---|---|
+| `index` | Urutan frame dalam thread (0 = terdalam) |
+| `object_name` | Nama binary/modul pemilik alamat ini |
+| `object_addr` | Alamat basis binary tersebut |
+| `instruction_addr` | Alamat instruksi — inilah yang diterjemahkan symbolication |
+| `is_app` | **Diisi SDK saat capture.** `true` bila frame berada di binary utama aplikasi (atau framework milik aplikasi), `false` untuk binary sistem. |
+| `symbol_name`, `file`, `line` | `null` sampai symbolication berjalan; diisi backend (BE-11) |
+
+> **`is_app` sengaja diisi SDK, bukan diturunkan konsumen.** SDK tahu persis binary utama aplikasinya saat crash terjadi; Frontend tidak, dan menebaknya dari nama akan rapuh (nama modul bisa mirip, framework milik aplikasi tidak akan terdeteksi).
+>
+> **Konsekuensi penting: penyorotan frame aplikasi TIDAK menunggu symbolication.** Alamat sudah dapat dipetakan ke binary pemiliknya lewat `binary_images` sejak awal, jadi "frame ini milik kode kita" sudah diketahui meski nama fungsinya belum ada. Justru di crash yang belum tersimbolikasi inilah penandanya paling berguna — ia memisahkan "crash di kode kita" dari "crash di framework sistem". FE-06 dapat berjalan penuh sebelum BE-10/11 ada.
+
+#### 4.3.2 Bentuk `binary_images`
+
+```json
+"binary_images": [
+  { "name": "MerchantApp", "uuid": "A1B2C3D4-...", "base_addr": "0x104a10000",
+    "size": 2457600, "arch": "arm64", "is_app": true }
+]
+```
+
+`uuid` wajib — inilah yang mencocokkan binary dengan berkas symbol (dSYM/mapping) yang benar. Symbol dari build lain tidak akan cocok.
 
 ### 4.4 `error` — dilaporkan manual
 
@@ -159,6 +207,25 @@ Konsekuensinya: input mentah yang sama (mis. nomor telepon yang sama) selalu men
 | `category` | `navigation` \| `user_action` \| `network` \| `lifecycle` \| `state` \| `log` |
 | `message` | Deskripsi singkat |
 | `level` | `debug` \| `info` \| `warning` \| `error` |
+
+#### 4.5.1 Snapshot breadcrumb pada `crash` / `error`
+
+Breadcrumb tidak dikirim sebagai event tersendiri ke disk. Ia hidup di ring buffer memori (100 terakhir) dan **ikut terlampir sebagai satu atribut `breadcrumbs`** ketika `crash` atau `error` terjadi. Nilainya adalah **string berisi JSON array** — konsumen perlu men-decode-nya sekali lagi:
+
+```json
+"breadcrumbs": "[{\"timestamp\":\"2026-09-01T08:30:57.309Z\",\"category\":\"network\",\"level\":\"info\",\"message\":\"connectivity_restored\"}]"
+```
+
+| Field entri | Keterangan |
+|---|---|
+| `timestamp` | ISO-8601 UTC. Frontend menampilkannya **relatif terhadap crash/error** (mis. `-4.2s`), bukan jam dinding |
+| `category` | Sama dengan enum di atas |
+| `level` | Sama dengan enum di atas |
+| `message` | Teks dari developer atau dari sumber otomatis |
+
+Urutan array kronologis: entri terakhir adalah yang paling dekat dengan kejadian.
+
+> Alasan bentuknya string, bukan array bersarang: dengan menjadi satu atribut string biasa, snapshot ini otomatis melewati lapisan scrubbing yang sama dengan atribut lain (SEC-05) tanpa perlu jalur khusus. Pesan breadcrumb ditulis developer, jadi ia termasuk jalur kebocoran PII yang paling sering.
 
 ### 4.6 `lifecycle` / `performance`
 
@@ -289,13 +356,25 @@ Autentikasi **terpisah** dari ingestion — sesi user / SSO, bukan `X-APM-Key`.
 | `GET /v1/apps/{id}/issues` | Daftar issue (filter, sort, paginasi) |
 | `GET /v1/issues/{id}` | Detail issue + stack tersimbolikasi + sample event |
 | `GET /v1/issues/{id}/breadcrumbs` | Timeline breadcrumb untuk sample event |
-| `GET /v1/apps/{id}/network` | Agregasi network per host & kategori |
+| `GET /v1/apps/{id}/network` | Agregasi network per host & kategori. Dengan `&host=…&failure_category=…` mengembalikan blok `drilldown` — lihat catatan di bawah. |
 | `POST /v1/apps/{id}/users/resolve` | Menerima identifier mentah (mis. nomor telepon/email), meng-hash-nya dengan `server_key`, mengembalikan `user_ref`. **Input tidak disimpan.** Ini yang membuat "cari user via nomor HP" tetap bisa tanpa menyimpan nomornya. |
 | `GET /v1/apps/{id}/users/{user_ref}` | Ringkasan user + timeline sesi (layar User Lookup) |
 | `PATCH /v1/issues/{id}` | Ubah status (triaged / resolved / ignored) |
 | `GET/POST /v1/apps/{id}/alerts` | Konfigurasi alert |
 
 > **Filter device-integrity berlaku lintas endpoint.** Endpoint `overview`, `issues`, dan `network` menerima parameter filter `is_emulator`, `is_rooted`, `is_dev_mode` — termasuk opsi "kecualikan sesi non-real (emulator/debug)" untuk metrik headline (FE-22).
+
+> **Blok `drilldown` pada endpoint network.** Diaktifkan dengan `&host=…` (opsional `&failure_category=…`) dan berisi, selain deret waktu per menit:
+>
+> | Field | Kegunaan |
+> |---|---|
+> | `failures`, `users_affected` | Skala dampak |
+> | `started`, `last_seen`, `peak` | Kapan mulai dan puncaknya — untuk anotasi pada grafik |
+> | `app_versions`, `platforms`, `os_versions` | Sebaran; masing-masing dengan `count` dan `pct` |
+> | `affected_version_count` / `active_version_count` | Berapa versi terdampak dari berapa versi yang aktif mengirim ke host itu |
+> | `all_active_versions_affected` | `true` bila **seluruh** versi aktif terdampak |
+>
+> Field terakhir itu yang mengubah callout "likely cause" (FE-11) dari dugaan menjadi kesimpulan berbukti: kegagalan yang melonjak di **semua versi aplikasi sekaligus** tidak mungkin berasal dari rilis baru — polanya menunjuk ke perubahan di sisi server (rotasi sertifikat terhadap klien yang mem-pin). Sebaliknya, kegagalan yang hanya muncul di satu versi menunjuk ke regresi di versi itu. Tanpa pembanding ini, Frontend hanya bisa menyatakan dugaan.
 
 ---
 
