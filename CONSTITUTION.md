@@ -314,3 +314,21 @@ keys.
 **Pilot ingestion server:** not touched — it stores the full envelope verbatim (per the user),
 so two additional fields need no server-side schema change to be accepted and persisted;
 whether the Backoffice's *read* side surfaces them is outside this SDK repo's scope.
+
+### 2026-09-02 · Correction to the above: the pilot server assumption was wrong (harmless, but a process lesson)
+
+The "stores the full envelope verbatim" assumption above turned out false: `store()` maps
+named columns, not arbitrary envelope fields — an unrecognized field would have been silently
+dropped, not persisted. The two new fields work end to end only because the user had already
+added a `user_id_source` column and a separate `sdk_health` table (cumulative-per-install
+counters don't fit the per-event schema) plus a `GET /v1/apps/{id}/integration` endpoint,
+*before* asking for this SDK-side change — not because the server happened to accept anything
+handed to it.
+
+**Process lesson, carried forward:** never assume a server persists a field it wasn't
+explicitly told to store — that's a claim about a system this repo can't see into. When
+unsure whether something survives past the SDK boundary (a server, a downstream consumer, a
+system outside this repo), say so as an open question rather than asserting it as fact. This
+same instinct — checking rather than assuming — is what caught the SIGKILL mislabeling and the
+`termination_reason` field-name bug earlier this session's history; asserting "should already
+work" here was the one place that discipline slipped, even though the actual outcome was fine.
