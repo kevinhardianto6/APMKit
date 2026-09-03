@@ -98,6 +98,7 @@ struct FileDiskQueueTests {
         #expect(remaining.map(\.type) == ["e2", "e3", "e4"])
         // MOB-27: the 2 evicted events were never sent — must be counted as dropped.
         #expect(selfHealth.snapshot().dropped == 2)
+        #expect(selfHealth.snapshot().dropReasons["queue_full"] == 2)
     }
 
     @Test("FIFO-evicts oldest events when the byte-size cap is exceeded")
@@ -207,5 +208,7 @@ struct FileDiskQueueTests {
         let events = try queue.peek(limit: 10) // must not throw
         #expect(events.map(\.type) == ["before", "after"])
         #expect(selfHealth.snapshot().dropped == 1)
+        // Undecryptable garbage fails at the decrypt step, not the decode step.
+        #expect(selfHealth.snapshot().dropReasons["decrypt_failure"] == 1)
     }
 }

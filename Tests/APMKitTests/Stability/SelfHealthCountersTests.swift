@@ -37,6 +37,30 @@ struct SelfHealthCountersTests {
         }
         #expect(counters.snapshot().written == 500)
     }
+
+    @Test("drop_reasons (docs/01 §2.3) accumulates independently per reason, and reasons never seen keep dropped's total correct")
+    func dropReasonsAccumulatePerReason() {
+        let counters = SelfHealthCounters()
+        counters.recordDropped(reason: "queue_full")
+        counters.recordDropped(3, reason: "queue_full")
+        counters.recordDropped(reason: "rejected")
+
+        let snapshot = counters.snapshot()
+        #expect(snapshot.dropped == 5)
+        #expect(snapshot.dropReasons["queue_full"] == 4)
+        #expect(snapshot.dropReasons["rejected"] == 1)
+        #expect(snapshot.dropReasons.count == 2)
+    }
+
+    @Test("recordDropped with no reason argument still counts, under \"unknown\" — a future call site can't go uncounted by forgetting to pass one")
+    func recordDroppedDefaultsToUnknownReason() {
+        let counters = SelfHealthCounters()
+        counters.recordDropped()
+
+        let snapshot = counters.snapshot()
+        #expect(snapshot.dropped == 1)
+        #expect(snapshot.dropReasons["unknown"] == 1)
+    }
 }
 
 @Suite("DiskQueueEventSink — MOB-27 write/drop accounting")
@@ -64,5 +88,6 @@ struct DiskQueueEventSinkSelfHealthTests {
 
         #expect(selfHealth.snapshot().dropped == 1)
         #expect(selfHealth.snapshot().written == 0)
+        #expect(selfHealth.snapshot().dropReasons["write_failure"] == 1)
     }
 }

@@ -157,7 +157,7 @@ public final class SyncEngine {
             // will never succeed no matter how many times it's resent. The spec explicitly
             // calls this out as a required internal metric ("Catat sebagai metrik internal").
             try? diskQueue.remove(eventIds: ids)
-            selfHealth.recordDropped(ids.count)
+            selfHealth.recordDropped(ids.count, reason: "rejected")
             currentBackoff = configuration.minBackoffSeconds
 
         case .unauthorized:

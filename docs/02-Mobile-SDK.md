@@ -94,7 +94,7 @@ SDK yang di-embed ke aplikasi iOS & Android, bertugas menangkap event, menyimpan
 | MOB-12 | Breadcrumb otomatis untuk **lifecycle app** dan **perubahan konektivitas** (benar-benar otomatis, tanpa aksi app host). Untuk **perpindahan screen**: di iOS bersifat *host-invoked* — SDK menyediakan primitive `recordScreen(_:)` plus helper opt-in (base class UIViewController & view modifier SwiftUI), **tanpa method swizzling**. Di Android perpindahan screen bisa otomatis via `ActivityLifecycleCallbacks`. | P0 |
 | MOB-13 | Ring buffer breadcrumb: 100 entri terakhir, dilampirkan ke setiap crash/error | P0 |
 | MOB-26 | Mode debug: log lokal berisi event yang tertangkap, non-aktif di build release | P1 |
-| MOB-28 | API `setUser(id)` untuk app host menetapkan `user_id` (string bebas). Jika tidak di-set, generate ID acak stabil per install sebagai fallback. `user_id` dikirim mentah di envelope; hashing dilakukan backend (BE-21). | P0 |
+| MOB-28 | API `setUser(id)` untuk app host menetapkan `user_id` (string bebas). Jika tidak di-set, generate ID acak stabil per install sebagai fallback. `user_id` dikirim mentah di envelope; hashing dilakukan backend (BE-21). **Sertakan `user_id_source`** (`host` \| `generated`, `01` §2.2) — tanpa itu aplikasi yang lupa memanggil `setUser` tidak dapat dibedakan dari yang memanggilnya. | P0 |
 
 > **Kenapa screen tracking di iOS tidak "otomatis" (MOB-12).** Satu-satunya cara membuatnya benar-benar otomatis di iOS adalah *method swizzling* `UIViewController.viewDidAppear`. Itu ditolak: teknik ini mengganti implementasi method sistem saat runtime, berisiko crash/undefined behavior, dan **bentrok dengan SDK lain yang melakukan hal sama** (Firebase Analytics sudah men-swizzle method ini di aplikasi kita). Karena SDK ini dipasang di aplikasi tim lain, kegagalan seperti itu akan dilimpahkan ke kita dan mematikan adopsi (G4) — melanggar batasan mutlak "SDK tidak boleh menjadi penyebab crash aplikasi host".
 >
@@ -122,7 +122,7 @@ SDK yang di-embed ke aplikasi iOS & Android, bertugas menangkap event, menyimpan
 | MOB-20 | Mengambil remote config saat startup, dengan cache & fallback default | P0 |
 | MOB-21 | Mematuhi kill switch (`enabled: false`) | P0 |
 | MOB-22 | Sampling per tipe event, dikontrol remote config | P1 (naik ke P0 di Fase 3 bila proyeksi volume melebihi kapasitas) |
-| MOB-27 | SDK melaporkan kesehatan dirinya sendiri: jumlah event tertulis vs terkirim vs terbuang | P1 |
+| MOB-27 | SDK menghitung kesehatan dirinya sendiri (event tertulis vs terkirim vs terbuang, beserta alasan pembuangan) **dan mengirimkannya di envelope sebagai `sdk.health`** (`01` §2.3). Penghitung yang hanya hidup di perangkat tidak memenuhi tujuan requirement ini — justru saat SDK diam-diam membuang data, tidak ada yang bisa melihatnya. | P1 |
 
 ### 3.7 Distribusi & Dukungan — Fase 1–3
 

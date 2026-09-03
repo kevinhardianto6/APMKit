@@ -89,7 +89,7 @@ public final class FileDiskQueue: DiskQueue {
                 let decodable: Data
                 if let encryption {
                     guard let decrypted = try? encryption.decrypt(rawData) else {
-                        selfHealth.recordDropped()
+                        selfHealth.recordDropped(reason: "decrypt_failure")
                         continue
                     }
                     decodable = decrypted
@@ -97,7 +97,7 @@ public final class FileDiskQueue: DiskQueue {
                     decodable = rawData
                 }
                 guard let event = try? decoder.decode(Event.self, from: decodable) else {
-                    selfHealth.recordDropped()
+                    selfHealth.recordDropped(reason: "undecodable")
                     continue
                 }
                 events.append(event)
@@ -134,7 +134,7 @@ public final class FileDiskQueue: DiskQueue {
             totalSize -= (try? fileSize(oldest)) ?? 0
             try? fileManager.removeItem(at: oldest)
             files.removeFirst()
-            selfHealth.recordDropped()
+            selfHealth.recordDropped(reason: "queue_full")
         }
     }
 

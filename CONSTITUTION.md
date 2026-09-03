@@ -278,3 +278,39 @@ decades-old constants) — covers every arch this SDK's deployment target can ac
 (`timestamp`/`category`/`level`/`message`, JSON-string-encoded) already matches
 `Breadcrumb`'s `Codable` output exactly, field names and ISO-8601-with-fractional-seconds
 format included — audited, not assumed.
+
+### 2026-09-02 · `user_id_source` and `sdk.health` added to the envelope (docs/01 §2.2/§2.3, MOB-27/28 extended)
+
+Both gaps were found while building the Backoffice: without `user_id_source`, an app that
+never wires `setUser` is invisible — it still produces a `user_id` (the generated fallback), so
+User Lookup returns data that looks normal but can never be correlated to a real user, and
+nothing distinguishes it from a host-set id. Without `sdk.health` leaving the device,
+`SelfHealthCounters` (MOB-27) was tracking exactly the right thing but shipping it nowhere —
+counters nobody can see can't do the job the requirement exists for, and it's precisely when
+the SDK is silently dropping data that the device-local view goes dark too.
+
+**`user_id_source`:** `UserIdentity.currentUserId()` stays as-is (unchanged signature,
+implemented in terms of the new function, so no existing caller breaks). The new
+`currentUserIdentity(userDefaults:) -> (id: String, source: UserIdSource)` computes both in one
+pass over `UserDefaults` rather than as two separate calls — reading `user_id` and
+`user_id_source` independently could, in principle, straddle a `setUser` call landing in
+between and report a pair that never actually co-occurred. `EnvelopeFactory`'s `userId: () ->
+String?` parameter became `userIdentity: () -> (id: String, source: UserIdSource)` for the same
+reason — one closure, not two, so the two pieces can't drift apart at the call site either.
+
+**`sdk.health`:** shipped as a new `SDKHealth` struct nested in `SDKInfo` (`nil` on the static
+`SDKInfo.current` constant, used only for the `X-APM-Sdk` upload header where there's no
+per-request health to report; always filled in by `EnvelopeFactory`, which reads
+`selfHealth.snapshot()` fresh on every `makeEnvelope` call — cumulative counters, not static
+context, so they can't be captured once and reused). `SelfHealthCounters.recordDropped` gained
+a `reason: String = "unknown"` parameter (default rather than required, so a future call site
+can't accidentally go uncounted by forgetting to pass one) and every existing call site was
+given a real reason: `write_failure` (`DiskQueueEventSink`), `queue_full` (`FileDiskQueue`
+eviction, MOB-06), `undecodable`/`decrypt_failure` (`FileDiskQueue.peek`'s poison-file skip),
+`rejected` (`SyncEngine`, a permanently-rejected batch). `drop_reasons` is open-ended by design
+(docs/01 §2.3) — new reason strings need no schema change; consumers must tolerate unrecognized
+keys.
+
+**Pilot ingestion server:** not touched — it stores the full envelope verbatim (per the user),
+so two additional fields need no server-side schema change to be accepted and persisted;
+whether the Backoffice's *read* side surfaces them is outside this SDK repo's scope.

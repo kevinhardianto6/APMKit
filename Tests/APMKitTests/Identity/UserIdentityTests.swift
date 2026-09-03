@@ -82,4 +82,39 @@ struct UserIdentityTests {
 
         #expect(installId != userIdFallback)
     }
+
+    // MARK: - user_id_source (docs/01 §2.2, MOB-28 extended)
+
+    @Test("without setUser, currentUserIdentity reports source .generated alongside the fallback id")
+    func currentUserIdentityReportsGeneratedWhenNoSetUser() throws {
+        let (defaults, suite) = try isolatedDefaults()
+        defer { defaults.removePersistentDomain(forName: suite) }
+
+        let (id, source) = UserIdentity.currentUserIdentity(userDefaults: defaults)
+        #expect(source == .generated)
+        #expect(UUID(uuidString: id) != nil)
+    }
+
+    @Test("after setUser, currentUserIdentity reports source .host alongside the exact explicit value")
+    func currentUserIdentityReportsHostAfterSetUser() throws {
+        let (defaults, suite) = try isolatedDefaults()
+        defer { defaults.removePersistentDomain(forName: suite) }
+
+        UserIdentity.setUser(id: "explicit-user-id", userDefaults: defaults)
+        let (id, source) = UserIdentity.currentUserIdentity(userDefaults: defaults)
+
+        #expect(id == "explicit-user-id")
+        #expect(source == .host)
+    }
+
+    @Test("currentUserId and currentUserIdentity never disagree — same id whether read alone or paired with its source")
+    func currentUserIdAndCurrentUserIdentityAgree() throws {
+        let (defaults, suite) = try isolatedDefaults()
+        defer { defaults.removePersistentDomain(forName: suite) }
+
+        #expect(UserIdentity.currentUserId(userDefaults: defaults) == UserIdentity.currentUserIdentity(userDefaults: defaults).id)
+
+        UserIdentity.setUser(id: "explicit-user-id", userDefaults: defaults)
+        #expect(UserIdentity.currentUserId(userDefaults: defaults) == UserIdentity.currentUserIdentity(userDefaults: defaults).id)
+    }
 }

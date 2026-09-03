@@ -7,29 +7,26 @@
 
 ## Now
 
-- **Objective:** No epic in progress. This session: a Backoffice-driven spec gap (docs/01
-  §4.3.1/§4.3.2, MOB-17 extension) — `is_app` per frame/binary_image, plus a full audit +
-  reshape of the `crash` payload to match the now-precise wire contract, and a confirmed
-  no-change-needed audit of §4.5.1 breadcrumb snapshot shape.
+- **Objective:** No epic in progress. This session: two envelope fields the Backoffice epic
+  exposed gaps for — `user_id_source` (MOB-28 extended, docs/01 §2.2) and `sdk.health` (MOB-27
+  extended, docs/01 §2.3).
 - **Active feature:** none — implemented, tested, not yet committed.
 - **Status:** —
-- **Last verify:** `./verify.sh build`/`test`/`budget` → all PASS, 2026-09-02. 242 tests (was
-  234 — added 8 for `is_app`/hex-address/arch/basename/thread-name reshaping).
+- **Last verify:** `./verify.sh build`/`test`/`budget` → all PASS, 2026-09-02. 248 tests (was
+  242 — added 6: 2 `SelfHealthCounters` drop-reason tests, 3 `UserIdentity` source tests, 1
+  `EnvelopeFactory` sdk.health test; 4 existing tests got new assertions rather than new tests).
 
 ## Next step
 
-1. **Not yet committed:** everything below — user didn't say "commit" this time (unlike the
-   prior three findings), so it's waiting on that per `CONSTITUTION.md`'s "never auto-commit."
-2. **Report back to the user:** confirmed §4.5.1 breadcrumb shape already matches exactly, no
-   change made there. Flagged that `FEATURES.md` item 6 (2026-08-28 Simulator crash
-   verification) predates this reshape and doesn't cover the new shape — new item 11 added for
-   that, still `☐ not verified`. Also worth a heads-up: this session started with a broken
-   baseline build (stale `.build` module cache referencing the *old* repo path,
-   `/Users/kevinhardianto/APMKit` → now `/Users/kevinhardianto/APM/APMKit`) — fixed by deleting
-   the two affected `ModuleCache` dirs (main `.build` and `scripts/size-budget/.build`), not a
-   code regression.
-3. Manual verification checklist in `FEATURES.md` now has 11 items; unchanged priority
-   otherwise from last session.
+1. **Not yet committed** — waiting on the user's go-ahead, per `CONSTITUTION.md`'s "never
+   auto-commit."
+2. **Pilot ingestion server:** not touched. User said it stores the full envelope verbatim, so
+   the two new fields need no server-side schema change to be *accepted* — I have no access to
+   that repo from here to verify further, or to check whether the Backoffice's read side
+   surfaces them. Flagged, not silently assumed fine.
+3. Both new fields are fully covered by `swift test` (pure Swift/UserDefaults logic, no
+   platform-specific API) — no new manual-verification checklist item needed, unlike most of
+   this repo's other recent additions.
 
 ## Parked
 
@@ -46,21 +43,20 @@
 
 ## Changes (this session)
 
-Previous session (README commit `ba17384`) closed out MOB-30/MOB-15b/MOB-11b — see that
-session's own state-file history in git log if needed; not repeated here.
-
-**This session — MOB-17 extension: `is_app`, full crash-payload reshape to docs/01 §4.3.1/§4.3.2.**
+Previous session (commit `20ba1ea`) closed out the MOB-17 `is_app`/crash-payload-reshape work.
 
 | File | What | Why |
 |---|---|---|
-| `Sources/APMKit/Crash/CrashReportMapper.swift` | New `reshapeBinaryImages`/`reshapeThreads`/`hexAddress`/`archString` helpers; `makeEvent` gains an `appBundlePath` param (default `Bundle.main.bundlePath`); `threads`/`binary_images` are now reshaped (not verbatim-passed) into the documented wire shape, including computed `is_app` | KSCrash's raw output never matched the now-precise §4.3.1/§4.3.2 contract at all (decimal addresses, full paths, `image_addr`/`image_size`/`cpu_type` instead of `base_addr`/`size`/`arch`, no `is_app`) — confirmed against real KSCrash source + `Example-Reports/*.json`, not assumed |
-| `Tests/APMKitTests/Crash/CrashReportMapperTests.swift` | 8 new tests: `is_app` true/false for app vs. system binary and frame, app-owned embedded framework, empty-`appBundlePath` guard, hex-string addresses matching docs' own worked example, `cpu_type`→`arch` mapping (arm64/arm64e/x86_64), basename-not-full-path, `file`/`line` always null + `symbol_name` passthrough, thread `name` falls back to `dispatch_queue` | Proves the reshape against a realistic nested fixture built from confirmed real KSCrash shape |
-| `CONSTITUTION.md` | New dated decision: the audit findings (not just `is_app` missing), how `is_app` is computed and why, the arch-mapping tradeoff, and the confirmed-matching breadcrumb audit | Full reasoning, matches this session's own "audit fully, report precisely" instruction |
-| `FEATURES.md` | New manual checklist item 11 (real-device verification of the reshaped payload); caveat added to item 6 (predates this reshape, doesn't cover it) | Honest tracking — item 6's Simulator run wasn't broken by this change but isn't evidence for the new shape either |
-| `docs/01-Kontrak-Data-API.md`, `docs/02-Mobile-SDK.md` | User's own edits (§4.3.1/§4.3.2 new sections, MOB-17 extended, plus unrelated §10 `drilldown` block and §11 formatting) — pulled and implemented against | Authoritative spec |
-
-**Confirmed, no code change:** docs/01 §4.5.1's breadcrumb snapshot shape
-(`timestamp`/`category`/`level`/`message`) already matches `Breadcrumb.swift`'s `Codable`
-output field-for-field, including the ISO-8601-with-fractional-seconds `timestamp` format.
+| `Sources/APMKit/Identity/UserIdentity.swift` | New `UserIdSource` enum (`.host`/`.generated`); new `currentUserIdentity(userDefaults:)` returning `(id, source)` in one pass; `currentUserId` now implemented in terms of it | Reading id and source via two separate calls could straddle a `setUser` landing in between and report a pair that never co-occurred |
+| `Sources/APMKit/Core/SDKInfo.swift` | New `SDKHealth` struct (`written`/`sent`/`dropped`/`drop_reasons`); `SDKInfo` gains an optional `health` field | Wire shape for docs/01 §2.3's `sdk.health` |
+| `Sources/APMKit/Stability/SelfHealthCounters.swift` | `recordDropped` gains `reason: String = "unknown"`; tracks a `dropReasons: [String: Int]` dict; `Snapshot` carries it | MOB-27 extended — counters need a *why*, not just a count |
+| `Sources/APMKit/Storage/DiskQueueEventSink.swift`, `Storage/FileDiskQueue.swift` (×2), `Sync/SyncEngine.swift` | Every existing `recordDropped()` call site now passes a real reason: `write_failure`, `queue_full`, `undecodable`/`decrypt_failure`, `rejected` | Otherwise `drop_reasons` would just be `{"unknown": N}` — the whole point is knowing why |
+| `Sources/APMKit/Core/Envelope.swift` | New `userIdSource: UserIdSource?` field/CodingKey (`user_id_source`), default `nil` so existing `Envelope(...)` call sites across the test suite didn't need touching | Wire shape for docs/01 §2.2 |
+| `Sources/APMKit/Sync/EnvelopeFactory.swift` | `userId: () -> String?` replaced with `userIdentity: () -> (id: String, source: UserIdSource)`; new `selfHealth: SelfHealthCounters` param; `makeEnvelope` builds `sdk` with a fresh `selfHealth.snapshot()` every call | One closure not two (can't drift apart); health is cumulative runtime state, read fresh, not static context |
+| `Tests/.../EnvelopeFactoryTests.swift`, `UserIdentityLeakTests.swift` | Updated to the new `userIdentity:` parameter | Compile fix for the signature change |
+| `Tests/.../UserIdentityTests.swift`, `SelfHealthCountersTests.swift`, `EnvelopeFactoryTests.swift`, `EnvelopeTests.swift` | New tests for `currentUserIdentity`, `drop_reasons` accumulation/default, `sdk.health` reflecting a live snapshot, and the full `user_id_source`/`sdk.health` wire shape | Evidence |
+| `Tests/.../FileDiskQueueTests.swift`, `SyncEngineTests.swift` | Existing eviction/poison-file/rejected-batch tests gained `dropReasons[...]` assertions | Proves the real call sites use the reasons claimed above, not just that *some* reason exists |
+| `CONSTITUTION.md` | New dated decision | Full reasoning |
+| `docs/01-Kontrak-Data-API.md`, `docs/02-Mobile-SDK.md` | User's own edits (§2.2/§2.3 new sections, MOB-27/28 extended, plus unrelated §10 User Lookup timeline/breadcrumb-availability note) — pulled and implemented against | Authoritative spec |
 
 _Ground truth: run `git diff --stat` to confirm this table matches reality._

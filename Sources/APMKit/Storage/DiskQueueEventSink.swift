@@ -20,7 +20,7 @@ public final class DiskQueueEventSink: EventSink {
             try diskQueue.enqueue(event)
             selfHealth.recordWritten()
         } catch {
-            selfHealth.recordDropped()
+            selfHealth.recordDropped(reason: "write_failure")
         }
     }
 }

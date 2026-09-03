@@ -34,7 +34,9 @@ Satu request berisi satu envelope. Konteks statis diletakkan di envelope (tidak 
 ```json
 {
   "schema_version": 1,
-  "sdk":     { "name": "apmkit-ios", "version": "1.0.0" },
+  "sdk":     { "name": "apmkit-ios", "version": "1.0.0",
+               "health": { "written": 1420, "sent": 1398, "dropped": 22,
+                           "drop_reasons": { "queue_full": 18, "rejected": 4 } } },
   "app":     { "id": "com.company.appname", "version": "3.2.1", "build": "1042" },
   "device":  { "os": "iOS", "os_version": "17.4", "model": "iPhone14,2",
                "locale": "id_ID", "timezone": "Asia/Jakarta" },
@@ -43,6 +45,7 @@ Satu request berisi satu envelope. Konteks statis diletakkan di envelope (tidak 
   "install_id": "8f14e45f-ea1a-4f2c-9d3b-7c2a1b0e5d44",
   "session_id": "b3d9c1a2-5e6f-4a7b-8c9d-0e1f2a3b4c5d",
   "user_id":    "client-supplied-string-or-sdk-generated",
+  "user_id_source": "host",
   "events": [ /* array of Event */ ]
 }
 ```
@@ -53,7 +56,38 @@ Satu request berisi satu envelope. Konteks statis diletakkan di envelope (tidak 
 | `install_id` | UUID | Identitas instalasi, digenerate saat SDK pertama kali jalan. **Bukan identitas user.** Reset saat app di-uninstall. |
 | `session_id` | UUID | Satu sesi = dari app foreground sampai background > 30 detik. |
 | `user_id` | string \| null | Identifier yang di-set app host — **string bebas** (boleh nomor telepon, email, user ID internal, atau apa pun). Kalau app host tidak mengisinya, SDK meng-generate ID acak stabil per install. **Dikirim mentah lewat TLS**, lalu di-hash jadi `user_ref` di ingestion (BE-21) — nilai mentah **tidak pernah disimpan**. Lihat §2.1. |
+| `user_id_source` | enum: `host` \| `generated` | Apakah `user_id` berasal dari `setUser` app host, atau digenerate SDK sebagai fallback. Lihat §2.2. |
 | `integrity` | object | Sinyal environment device, di-snapshot sekali per sesi: `is_emulator`, `is_rooted`, `is_dev_mode`, `debugger_attached` (semua `bool`). Bersifat heuristik (MOB-29..31). Bukan PII. |
+| `sdk.health` | object | Penghitung kesehatan SDK sendiri (MOB-27): `written`, `sent`, `dropped`, dan `drop_reasons`. Lihat §2.3. |
+
+### 2.2 `user_id_source` — kenapa perlu dibedakan
+
+Nilai `user_id` selalu terisi: bila app host tidak memanggil `setUser`, SDK memakai ID acak
+yang stabil per install. Dari sisi backend keduanya terlihat identik — sama-sama string
+yang di-hash menjadi `user_ref`.
+
+Padahal artinya jauh berbeda. `user_ref` dari identifier app host **dapat dicocokkan**
+dengan sistem utama aplikasi (itulah yang membuat "cari user via nomor HP" berfungsi);
+`user_ref` dari ID generate **tidak bisa** — ia hanya konsisten di dalam APM.
+
+Tanpa penanda ini, aplikasi yang lupa memanggil `setUser` terlihat sehat sepenuhnya:
+User Lookup tetap mengembalikan data, hanya saja tidak pernah bisa dihubungkan ke user
+sungguhan, dan tidak ada yang menyadarinya. Inilah salah satu peringatan integrasi di
+`04` §3.8.
+
+### 2.3 `sdk.health` — penghitung yang harus keluar dari perangkat
+
+MOB-27 meminta SDK menghitung event yang ditulis, terkirim, dan terbuang. Penghitung yang
+hanya hidup di perangkat tidak memenuhi tujuannya — justru saat SDK diam-diam membuang
+data itulah tidak ada seorang pun yang bisa melihatnya.
+
+Karena itu penghitung dikirim di envelope, bersifat kumulatif per install, dan dipakai
+untuk peringatan integrasi (`04` §3.8): rasio `dropped` terhadap `written` yang naik
+berarti antrean penuh atau payload ditolak — masalah yang perlu diketahui sebelum
+menjelma jadi lubang data yang tak dijelaskan.
+
+`drop_reasons` bersifat terbuka (mis. `queue_full`, `rejected`, `undecodable`); konsumen
+harus menangani kunci yang belum dikenal tanpa rusak.
 
 ### 2.1 Identifier: `user_id` (mentah, transit) → `user_ref` (tersimpan)
 
@@ -358,11 +392,23 @@ Autentikasi **terpisah** dari ingestion — sesi user / SSO, bukan `X-APM-Key`.
 | `GET /v1/issues/{id}/breadcrumbs` | Timeline breadcrumb untuk sample event |
 | `GET /v1/apps/{id}/network` | Agregasi network per host & kategori. Dengan `&host=…&failure_category=…` mengembalikan blok `drilldown` — lihat catatan di bawah. |
 | `POST /v1/apps/{id}/users/resolve` | Menerima identifier mentah (mis. nomor telepon/email), meng-hash-nya dengan `server_key`, mengembalikan `user_ref`. **Input tidak disimpan.** Ini yang membuat "cari user via nomor HP" tetap bisa tanpa menyimpan nomornya. |
-| `GET /v1/apps/{id}/users/{user_ref}` | Ringkasan user + timeline sesi (layar User Lookup) |
+| `GET /v1/apps/{id}/users/{user_ref}` | Ringkasan user + timeline sesi (layar User Lookup). Tiap sesi membawa `timeline` (dari event tersimpan) dan `breadcrumbs` — lihat catatan di bawah. |
+| `GET /v1/apps/{id}/integration` | Data peringatan integrasi (`04` §3.8): `user_id_source`, `sdk_health`, versi SDK terpasang vs terbaru, dan status symbolication. Setiap blok membawa `available` — bila `false`, kondisi itu **belum bisa dinyatakan** dan Frontend tidak boleh menampilkannya sebagai "aman". |
 | `PATCH /v1/issues/{id}` | Ubah status (triaged / resolved / ignored) |
 | `GET/POST /v1/apps/{id}/alerts` | Konfigurasi alert |
 
 > **Filter device-integrity berlaku lintas endpoint.** Endpoint `overview`, `issues`, dan `network` menerima parameter filter `is_emulator`, `is_rooted`, `is_dev_mode` — termasuk opsi "kecualikan sesi non-real (emulator/debug)" untuk metrik headline (FE-22).
+
+> **Breadcrumb pada timeline sesi — apa yang ada dan apa yang tidak.** Breadcrumb hidup di ring buffer memori perangkat dan **hanya ikut terkirim ketika ada `crash` atau `error`** (§4.5.1). Konsekuensinya:
+>
+> | Hasil sesi | `breadcrumbs` | `timeline` |
+> |---|---|---|
+> | `crashed` / `errors` | Terisi — jejak lengkap sebelum kejadian | Terisi |
+> | `clean` | **Kosong** — tidak pernah dikirim | Terisi |
+>
+> Sesi bersih tidak punya breadcrumb **secara desain**, bukan karena datanya hilang. Mengirimkannya untuk setiap sesi akan melipatgandakan volume unggahan tanpa manfaat diagnostik — tidak ada yang perlu didiagnosa pada sesi yang berjalan normal.
+>
+> Karena itu setiap sesi juga membawa `timeline`, disusun dari event yang benar-benar tersimpan (request network, crash, error, termination, lifecycle). Untuk sesi bersih, inilah satu-satunya rekaman aktivitas yang tersedia — dan ia data nyata, bukan pengganti. Frontend memakai `breadcrumbs_available` untuk memilih tampilan, dan **tidak menampilkan hitungan breadcrumb pada sesi bersih**.
 
 > **Blok `drilldown` pada endpoint network.** Diaktifkan dengan `&host=…` (opsional `&failure_category=…`) dan berisi, selain deret waktu per menit:
 >

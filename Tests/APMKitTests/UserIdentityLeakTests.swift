@@ -78,7 +78,7 @@ struct UserIdentityLeakTests {
         // from this batch at upload time. Not a leak — this is the whole point of user_id.
         let envelopeFactory = EnvelopeFactory(
             sessionManager: sessionManager,
-            userId: { UserIdentity.currentUserId(userDefaults: userDefaults) }
+            userIdentity: { UserIdentity.currentUserIdentity(userDefaults: userDefaults) }
         )
         let envelope = envelopeFactory.makeEnvelope(events: stored)
         #expect(envelope.userId == rawUserId)

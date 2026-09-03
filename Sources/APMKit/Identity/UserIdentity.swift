@@ -1,5 +1,14 @@
 import Foundation
 
+/// `envelope.user_id_source` — docs/01 §2.2, MOB-28 extended. Without this, an app that never
+/// wires `setUser` is invisible: its sessions still produce a `user_id` (the generated
+/// fallback), so User Lookup returns data that looks normal but can never be correlated to a
+/// real user — and nobody notices, because nothing distinguishes it from a host-set id.
+public enum UserIdSource: String, Codable, Equatable {
+    case host
+    case generated
+}
+
 /// `envelope.user_id` — docs/01 §2.1, MOB-28, SEC-06.
 ///
 /// **The raw value is sent as-is, never hashed or validated client-side.** Hashing to the
@@ -23,16 +32,25 @@ public enum UserIdentity {
 
     /// The raw `user_id` for the next envelope: the explicitly-set value if any, otherwise a
     /// stable random id generated once and persisted per install (docs/01 §2: "Kalau app
-    /// host tidak mengisinya, SDK meng-generate ID acak stabil per install").
+    /// host tidak mengisinya, SDK meng-generate ID acak stabil per install"). Implemented in
+    /// terms of `currentUserIdentity` so the two can never disagree about which branch fired.
     public static func currentUserId(userDefaults: UserDefaults = .standard) -> String {
+        currentUserIdentity(userDefaults: userDefaults).id
+    }
+
+    /// `user_id` and `user_id_source` (docs/01 §2.2), computed together in one pass over
+    /// `UserDefaults` — reading them via two separate calls could, in principle, straddle a
+    /// `setUser` call landing in between and report an id/source pair that never actually
+    /// co-occurred. `EnvelopeFactory` uses this, not `currentUserId` alone.
+    public static func currentUserIdentity(userDefaults: UserDefaults = .standard) -> (id: String, source: UserIdSource) {
         if let explicit = userDefaults.string(forKey: explicitKey) {
-            return explicit
+            return (explicit, .host)
         }
         if let fallback = userDefaults.string(forKey: fallbackKey) {
-            return fallback
+            return (fallback, .generated)
         }
         let generated = UUID().uuidString
         userDefaults.set(generated, forKey: fallbackKey)
-        return generated
+        return (generated, .generated)
     }
 }

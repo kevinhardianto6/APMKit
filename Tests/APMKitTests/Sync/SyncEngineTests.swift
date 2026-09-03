@@ -100,6 +100,7 @@ struct SyncEngineTests {
         await trigger(engine) // nothing left to upload
         #expect(uploader.callCount == 1)
         #expect(selfHealth.snapshot().dropped == 1) // MOB-27, docs/01 §7: "Catat sebagai metrik internal"
+        #expect(selfHealth.snapshot().dropReasons["rejected"] == 1)
     }
 
     @Test("MOB-21 kill switch: disabled means a sync cycle never uploads, even with data queued and a trigger fired")

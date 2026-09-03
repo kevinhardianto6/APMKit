@@ -7,7 +7,10 @@ struct EnvelopeTests {
     @Test("encodes the exact envelope field set with snake_case keys")
     func encodesExactShape() throws {
         let envelope = Envelope(
-            sdk: SDKInfo(name: "apmkit-ios", version: "1.0.0"),
+            sdk: SDKInfo(
+                name: "apmkit-ios", version: "1.0.0",
+                health: SDKHealth(written: 1420, sent: 1398, dropped: 22, dropReasons: ["queue_full": 18, "rejected": 4])
+            ),
             app: AppInfo(id: "com.company.appname", version: "3.2.1", build: "1042"),
             device: DeviceInfo(
                 os: "iOS", osVersion: "17.4", model: "iPhone14,2",
@@ -19,6 +22,7 @@ struct EnvelopeTests {
             installId: "8f14e45f-ea1a-4f2c-9d3b-7c2a1b0e5d44",
             sessionId: "b3d9c1a2-5e6f-4a7b-8c9d-0e1f2a3b4c5d",
             userId: "client-supplied-string-or-sdk-generated",
+            userIdSource: .host,
             events: []
         )
 
@@ -29,11 +33,18 @@ struct EnvelopeTests {
         #expect(json["install_id"] as? String == "8f14e45f-ea1a-4f2c-9d3b-7c2a1b0e5d44")
         #expect(json["session_id"] as? String == "b3d9c1a2-5e6f-4a7b-8c9d-0e1f2a3b4c5d")
         #expect(json["user_id"] as? String == "client-supplied-string-or-sdk-generated")
+        #expect(json["user_id_source"] as? String == "host")
         #expect(json["events"] as? [[String: Any]] != nil)
 
         let sdk = try #require(json["sdk"] as? [String: Any])
         #expect(sdk["name"] as? String == "apmkit-ios")
         #expect(sdk["version"] as? String == "1.0.0")
+        let health = try #require(sdk["health"] as? [String: Any])
+        #expect(health["written"] as? Int == 1420)
+        #expect(health["sent"] as? Int == 1398)
+        #expect(health["dropped"] as? Int == 22)
+        let dropReasons = try #require(health["drop_reasons"] as? [String: Int])
+        #expect(dropReasons == ["queue_full": 18, "rejected": 4])
 
         let app = try #require(json["app"] as? [String: Any])
         #expect(app["id"] as? String == "com.company.appname")
@@ -56,7 +67,7 @@ struct EnvelopeTests {
         // No extra top-level fields beyond the schema.
         #expect(Set(json.keys) == [
             "schema_version", "sdk", "app", "device", "integrity",
-            "install_id", "session_id", "user_id", "events"
+            "install_id", "session_id", "user_id", "user_id_source", "events"
         ])
     }
 
@@ -73,6 +84,7 @@ struct EnvelopeTests {
         let data = try JSONEncoder().encode(envelope)
         let decoded = try JSONDecoder().decode(Envelope.self, from: data)
         #expect(decoded.userId == nil)
+        #expect(decoded.userIdSource == nil)
     }
 
     @Test("round-trips through encode/decode unchanged")

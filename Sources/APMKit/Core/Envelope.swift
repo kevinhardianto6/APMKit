@@ -12,6 +12,12 @@ public struct Envelope: Codable, Equatable {
     public var installId: String
     public var sessionId: String
     public var userId: String?
+    /// docs/01 §2.2, MOB-28 extended (2026-09-02): whether `userId` came from the host app's
+    /// own `setUser` call or is the SDK-generated fallback — see `UserIdSource`'s doc comment
+    /// for why this distinction matters. `nil` only for envelopes built without going through
+    /// `EnvelopeFactory` (e.g. hand-constructed test fixtures); real uploads always set it
+    /// alongside `userId`, from the same `UserIdentity.currentUserIdentity()` call.
+    public var userIdSource: UserIdSource?
     public var events: [Event]
 
     enum CodingKeys: String, CodingKey {
@@ -20,6 +26,7 @@ public struct Envelope: Codable, Equatable {
         case installId = "install_id"
         case sessionId = "session_id"
         case userId = "user_id"
+        case userIdSource = "user_id_source"
         case events
     }
 
@@ -37,6 +44,7 @@ public struct Envelope: Codable, Equatable {
         installId: String,
         sessionId: String,
         userId: String?,
+        userIdSource: UserIdSource? = nil,
         events: [Event]
     ) {
         self.schemaVersion = schemaVersion
@@ -47,6 +55,7 @@ public struct Envelope: Codable, Equatable {
         self.installId = installId
         self.sessionId = sessionId
         self.userId = userId
+        self.userIdSource = userIdSource
         self.events = events
     }
 }
