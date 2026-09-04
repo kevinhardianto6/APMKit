@@ -17,7 +17,7 @@ selecting the `APMKit` library product for your app target.
 
 ```swift
 dependencies: [
-    .package(url: "<APMKit repository URL>", from: "1.0.0")
+    .package(url: "<APMKit repository URL>", from: "0.0.3")
 ],
 targets: [
     .target(name: "YourApp", dependencies: ["APMKit"])
@@ -69,13 +69,22 @@ let (session, _) = apm.instrumentedSession()
 
 Your APM Kit ingest traffic is automatically excluded from capture — no manual step needed.
 
-## Step 4 — Report errors and set the user (optional)
+## Step 4 — Report errors and set the user (optional, but read this one)
 
 ```swift
 apm.logError(someError, context: ["screen": "checkout"])
 APM.setUser(id: "user-123")            // raw value; hashing happens server-side
 APM.breadcrumb("tapped_checkout", category: .userAction)
 ```
+
+`APM.setUser` is the only step in this guide that's "optional" in a way worth pausing on. If
+your app never calls it, every session still gets a `user_id` — the SDK generates and persists
+a stable per-install fallback — so nothing looks broken. But that fallback can never be
+correlated to a real user in User Lookup (`user_id_source` reports `generated`, not `host`),
+and there's no error or warning to tell you this happened. If your team plans to search
+sessions by phone number, email, or internal user id in the Backoffice, call `setUser` as soon
+as you know who the user is (login, or app launch for an already-signed-in user) — not just
+when convenient.
 
 ## Step 5 — Record cold-start (optional, but recommended)
 

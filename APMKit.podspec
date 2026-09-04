@@ -1,6 +1,6 @@
 Pod::Spec.new do |s|
   s.name         = "APMKit"
-  s.version      = "1.0.0"
+  s.version      = "0.0.3"
   s.summary      = "In-house iOS Application Performance Monitoring SDK — crash reporting and network observability."
   s.homepage     = "https://github.com/kevinhardianto6/APMKit"
   s.license      = { :type => "Proprietary", :text => "Internal use only — not for public distribution." }

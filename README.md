@@ -42,7 +42,7 @@ Or in `Package.swift`:
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/kevinhardianto6/APMKit.git", from: "1.0.0")
+    .package(url: "https://github.com/kevinhardianto6/APMKit.git", from: "0.0.3")
 ],
 targets: [
     .target(name: "YourApp", dependencies: ["APMKit"])
@@ -52,7 +52,7 @@ targets: [
 ### CocoaPods
 
 ```ruby
-pod 'APMKit', '~> 1.0'
+pod 'APMKit', '~> 0.0.3'
 ```
 
 ## Quick start

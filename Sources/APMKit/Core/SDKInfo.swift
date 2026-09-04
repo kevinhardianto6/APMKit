@@ -14,7 +14,7 @@ public struct SDKInfo: Codable, Equatable {
         self.health = health
     }
 
-    public static let current = SDKInfo(name: "apmkit-ios", version: "1.0.0")
+    public static let current = SDKInfo(name: "apmkit-ios", version: "0.0.3")
 }
 
 /// `envelope.sdk.health` — docs/01 §2.3, MOB-27 extended. `SelfHealthCounters` already counts

@@ -43,7 +43,7 @@ struct IngestClientTests {
         #expect(request.method == "POST")
         #expect(request.path == "/v1/ingest")
         #expect(request.headers["X-APM-Key"] == "test-app-key")
-        #expect(request.headers["X-APM-Sdk"] == "apmkit-ios/1.0.0")
+        #expect(request.headers["X-APM-Sdk"] == "apmkit-ios/0.0.3")
         #expect(request.headers["Content-Type"] == "application/json")
         #expect(request.headers["Content-Encoding"] == "gzip")
 
